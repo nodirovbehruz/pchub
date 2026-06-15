@@ -1,0 +1,173 @@
+/* ==============================================
+   PCHUB PRO — GLOBAL SENET UI THEME
+   Overrides default Jazzmin "darkly" theme 
+   ============================================== */
+
+:root {
+    --senet-bg-dark:     #0b1120;
+    --senet-bg-panel:    #1e293b;
+    --senet-accent:      #8b5cf6; /* Indigo/Purple */
+    --senet-accent-dim:  rgba(139, 92, 246, 0.15);
+    --senet-text:        #f8fafc;
+    --senet-text-muted:  #94a3b8;
+    --senet-border:      rgba(255, 255, 255, 0.08);
+    
+    --success:           #10b981;
+    --danger:            #ef4444;
+    --warning:           #f59e0b;
+}
+
+/* ── 1. GLOBAL BACKGROUND & TYPOGRAPHY ── */
+body, .content-wrapper, .wrapper {
+    background: var(--senet-bg-dark) !important;
+    color: var(--senet-text) !important;
+    font-family: 'Inter', system-ui, sans-serif !important;
+}
+
+a { color: var(--senet-accent); transition: 0.15s; text-decoration: none; }
+a:hover { color: #a78bfa; }
+
+/* ── 2. CARDS & PANELS ── */
+.card, .info-box, .small-box {
+    background: var(--senet-bg-panel) !important;
+    border: 1px solid var(--senet-border) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
+}
+
+.card-header {
+    background: transparent !important;
+    border-bottom: 1px solid var(--senet-border) !important;
+    font-weight: 800 !important;
+    color: #fff !important;
+    padding: 18px 24px !important;
+}
+
+.card-title {
+    font-size: 14px !important;
+    font-weight: 800 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* ── 3. FORMS & INPUTS ── */
+.form-control, .select2-selection, input, select, textarea {
+    background-color: #0f172a !important; /* Extremely dark blue */
+    border: 1px solid var(--senet-border) !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    padding: 10px 14px;
+    font-size: 14px !important;
+    box-shadow: none !important;
+    transition: border-color 0.15s;
+}
+
+.form-control:focus, .select2-selection:focus, input:focus, select:focus {
+    border-color: var(--senet-accent) !important;
+    outline: none !important;
+}
+
+.form-group label, .control-label, label {
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--senet-text-muted) !important;
+    margin-bottom: 8px !important;
+}
+
+/* Select2 dropdown popup */
+.select2-dropdown {
+    background-color: var(--senet-bg-panel) !important;
+    border: 1px solid var(--senet-border) !important;
+    border-radius: 8px !important;
+}
+.select2-results__option {
+    color: #fff !important;
+}
+.select2-results__option[aria-selected="true"],
+.select2-results__option--highlighted {
+    background-color: var(--senet-accent) !important;
+    color: #fff !important;
+}
+
+/* ── 4. BUTTONS ── */
+.btn {
+    font-weight: 700 !important;
+    font-family: 'Inter', sans-serif !important;
+    border-radius: 8px !important;
+    text-transform: none !important;
+    padding: 8px 18px !important;
+    border: none !important;
+    box-shadow: none !important;
+    transition: 0.15s !important;
+}
+
+.btn-primary, .btn-info, input[type="submit"].default {
+    background: var(--senet-accent) !important;
+    color: #fff !important;
+}
+.btn-primary:hover, .btn-info:hover, input[type="submit"].default:hover {
+    background: #7c3aed !important;
+}
+
+.btn-success { background: rgba(16,185,129,0.15) !important; color: var(--success) !important; border: 1px solid rgba(16,185,129,0.3) !important; }
+.btn-success:hover { background: rgba(16,185,129,0.25) !important; }
+
+.btn-danger { background: rgba(239,68,68,0.15) !important; color: var(--danger) !important; border: 1px solid rgba(239,68,68,0.3) !important; }
+.btn-danger:hover { background: rgba(239,68,68,0.25) !important; }
+
+.btn-default, .btn-secondary {
+    background: rgba(255,255,255,0.05) !important;
+    color: var(--senet-text-muted) !important;
+    border: 1px solid var(--senet-border) !important;
+}
+.btn-default:hover, .btn-secondary:hover {
+    background: rgba(255,255,255,0.1) !important;
+    color: #fff !important;
+}
+
+/* ── 5. TABLES ── */
+.table { color: var(--senet-text) !important; }
+.table th {
+    border-bottom: 1px solid var(--senet-border) !important;
+    border-top: none !important;
+    background: rgba(255,255,255,0.02) !important;
+    color: var(--senet-text-muted) !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 16px !important;
+}
+.table td {
+    border-color: rgba(255,255,255,0.04) !important;
+    vertical-align: middle !important;
+    padding: 14px 16px !important;
+}
+.table-hover tbody tr:hover td {
+    background-color: rgba(255,255,255,0.02) !important;
+}
+
+/* ── 6. JAZZMIN SPECIFICS ── */
+.main-header { display: none !important; } /* Hide jazzmin top header inside wrapped apps */
+.main-footer { display: none !important; } /* Hide copyright footer everywhere */
+
+/* Breadcrumbs */
+.breadcrumb { background: transparent !important; margin-bottom: 20px; }
+.breadcrumb-item a { color: var(--senet-accent) !important; font-weight: 600; }
+.breadcrumb-item.active { color: var(--senet-text-muted) !important; }
+
+/* Pagination */
+.pagination .page-item .page-link {
+    background: rgba(255,255,255,0.05) !important;
+    border: none !important;
+    color: var(--senet-text-muted) !important;
+    border-radius: 8px;
+    margin: 0 3px;
+    font-weight: 700;
+}
+.pagination .page-item.active .page-link {
+    background: var(--senet-accent) !important;
+    color: #fff !important;
+}

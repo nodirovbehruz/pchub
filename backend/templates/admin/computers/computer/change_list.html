@@ -1,0 +1,35 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if show_map_button %}
+    <li>
+        <a href="{{ club_map_url }}"
+           style="
+               display: inline-flex;
+               align-items: center;
+               gap: 7px;
+               background: linear-gradient(135deg, #7c3aed, #a855f7);
+               color: #fff;
+               padding: 10px 20px;
+               border-radius: 10px;
+               font-weight: 700;
+               font-size: 13px;
+               text-decoration: none;
+               box-shadow: 0 4px 16px rgba(139,92,246,.35);
+               transition: all .2s;
+           "
+           onmouseover="this.style.background='linear-gradient(135deg,#6d28d9,#9333ea)'"
+           onmouseout="this.style.background='linear-gradient(135deg,#7c3aed,#a855f7)'">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            🗺 Карта клуба
+        </a>
+    </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}

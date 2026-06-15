@@ -1,0 +1,12 @@
+{
+  "pythonVersion": "3.13",
+  "venvPath": ".",
+  "extraPaths": [
+    "."
+  ],
+  "exclude": [
+    "**/migrations/**"
+  ],
+  "reportMissingModuleSource": "none",
+  "reportMissingImports": "none"
+}

@@ -1,0 +1,275 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Касса и Смены - PCHub PRO{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+    .cr-container {
+        padding: 40px;
+        background: var(--senet-bg-dark);
+        color: var(--senet-text);
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .cr-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 30px;
+    }
+
+    .cr-title {
+        font-weight: 900;
+        font-size: 28px;
+    }
+
+    .status-badge {
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .status-active { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid var(--success); }
+    .status-inactive { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid var(--danger); }
+
+    .grid-layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 30px;
+    }
+
+    .card {
+        background: var(--senet-bg-panel);
+        border: 1px solid var(--senet-border);
+        border-radius: 12px;
+        padding: 24px;
+    }
+    .card h3 {
+        margin-top: 0;
+        margin-bottom: 20px;
+        font-weight: 800;
+        font-size: 18px;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .stat-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px dashed var(--senet-border);
+        font-size: 16px;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--senet-text-muted); }
+    .stat-value { font-weight: bold; font-family: monospace; font-size: 18px; }
+    
+    .stat-highlight { color: var(--success); font-size: 24px; }
+
+    .form-group {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .form-group label {
+        color: var(--senet-text-muted);
+        font-size: 14px;
+    }
+    .form-control {
+        background: #0f172a;
+        border: 1px solid var(--senet-border);
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 18px;
+        font-family: monospace;
+    }
+    .form-control:focus { outline: none; border-color: var(--senet-accent); }
+
+    .btn-close-shift {
+        margin-top: 20px;
+        width: 100%;
+        background: var(--danger);
+        color: #fff;
+        border: none;
+        padding: 15px;
+        border-radius: 8px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .btn-close-shift:hover { background: #b91c1c; }
+
+    .btn-open-shift {
+        background: var(--success);
+        color: #fff;
+        border: none;
+        padding: 15px 30px;
+        border-radius: 8px;
+        font-weight: 800;
+        font-size: 18px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .btn-open-shift:hover { background: #059669; }
+
+    /* Messages */
+    .messages {
+        list-style: none;
+        padding: 0;
+        margin-bottom: 20px;
+    }
+    .messages li {
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+    .messages li.success { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--success); color: var(--success); }
+    .messages li.error { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cr-container">
+    <div class="cr-header">
+        <h1 class="cr-title">Управление Кассой</h1>
+        {% if active_shift %}
+            <div class="status-badge status-active">
+                <i class="fa-solid fa-clock"></i> Смена открыта (Админ: {{ active_shift.admin.username }})
+            </div>
+        {% else %}
+            <div class="status-badge status-inactive">
+                <i class="fa-solid fa-lock"></i> Смена закрыта
+            </div>
+        {% endif %}
+    </div>
+
+    {% if messages %}
+    <ul class="messages">
+        {% for message in messages %}
+        <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+
+    <div class="grid-layout">
+        <!-- Current Shift Overview (X-Report) -->
+        <div class="card">
+            <h3><i class="fa-solid fa-file-invoice-dollar"></i> X-Отчет (Текущий срез)</h3>
+            {% if active_shift %}
+                <div class="stat-row">
+                    <span class="stat-label">Остаток на начало смены:</span>
+                    <span class="stat-value">{{ x_report.initial|floatformat:2 }} ₽</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Оплаты Наличными:</span>
+                    <span class="stat-value">{{ x_report.cash|floatformat:2 }} ₽</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Оплаты Картой:</span>
+                    <span class="stat-value">{{ x_report.card|floatformat:2 }} ₽</span>
+                </div>
+                <div class="stat-row" style="margin-top: 20px; border-top: 2px solid var(--senet-border); padding-top: 20px;">
+                    <span class="stat-label" style="color: #fff; font-weight: bold; font-size: 18px;">ИТОГО В КАССЕ (Наличные):</span>
+                    <span class="stat-value stat-highlight">{{ x_report.expected|floatformat:2 }} ₽</span>
+                </div>
+            {% else %}
+                <div style="text-align: center; padding: 40px; color: var(--senet-text-muted);">
+                    Смена закрыта. X-отчет недоступен.
+                    <br><br>
+                    <form method="POST" action="{% url 'admin:billing_open_shift_action' %}" style="display:flex; flex-direction:column; align-items:center; max-width:300px; margin: 0 auto; gap: 15px;">
+                        {% csrf_token %}
+                        <div style="width: 100%; text-align: left;">
+                            <label for="initial_cash" style="font-size:12px; font-weight:bold; color:var(--senet-text);">ОСТАТОК В КАССЕ (руб)</label>
+                            <input type="number" step="0.01" name="initial_cash" id="initial_cash" class="form-control" placeholder="0.00" value="0.00" required>
+                        </div>
+                        <button type="submit" class="btn-open-shift" style="width: 100%;">
+                            <i class="fa-solid fa-play"></i> ОТКРЫТЬ СМЕНУ
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Z-Report / Shift Close Form -->
+        <div class="card">
+            <h3><i class="fa-solid fa-cash-register"></i> Z-Отчет (Закрытие смены)</h3>
+            {% if active_shift %}
+                <p style="color: var(--senet-text-muted); line-height: 1.5;">
+                    Внимание: снятие Z-отчета навсегда закрывает текущую смену. 
+                    Все транзакции будут сохранены, а выявленная недостача будет зафиксирована.
+                </p>
+
+                <form method="POST" action="{% url 'admin:billing_close_shift_action' %}">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="closing_cash">ФАКТИЧЕСКИЙ ОСТАТОК НАЛИЧНЫХ (СУММА В КАССЕ)</label>
+                        <input type="number" step="0.01" name="closing_cash" id="closing_cash" class="form-control" required placeholder="Например: 15450.00" value="{{ x_report.expected|floatformat:2 }}">
+                    </div>
+                    <button type="submit" class="btn-close-shift" onclick="return confirm('Вы уверены, что хотите снять Z-Отчет и закрыть смену?');">
+                        <i class="fa-solid fa-lock"></i> СНЯТЬ Z-ОТЧЕТ И ЗАКРЫТЬ СМЕНУ
+                    </button>
+                </form>
+            {% else %}
+                <div style="text-align: center; padding: 40px; color: var(--senet-text-muted);">
+                    Чтобы закрыть смену, её нужно сначала открыть.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent closed shifts -->
+    <div class="card" style="margin-top: 30px;">
+        <h3><i class="fa-solid fa-history"></i> Недавние Z-Отчеты (История Смен)</h3>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 15px;">
+            <tr style="border-bottom: 2px solid var(--senet-border); text-align: left; color: var(--senet-text-muted);">
+                <th style="padding: 10px;">ID</th>
+                <th style="padding: 10px;">Дата</th>
+                <th style="padding: 10px;">Админ</th>
+                <th style="padding: 10px;">Выручка (Всего)</th>
+                <th style="padding: 10px;">Фактически в кассе</th>
+                <th style="padding: 10px;">Недостача</th>
+            </tr>
+            {% for s in recent_shifts %}
+            <tr style="border-bottom: 1px solid var(--senet-border);">
+                <td style="padding: 12px; font-family: monospace;">#{{ s.id }}</td>
+                <td style="padding: 12px;">{{ s.start_time|date:"d.m.Y H:i" }}</td>
+                <td style="padding: 12px;">{{ s.admin.username }}</td>
+                <td style="padding: 12px; font-weight: bold; color: var(--success);">{{ s.total_revenue|floatformat:2 }} ₽</td>
+                <td style="padding: 12px; font-weight: bold;">
+                    {% if s.is_active %}
+                        <span style="color: var(--senet-text-muted);">В процессе...</span>
+                    {% elif s.closing_cash is not None %}
+                        {{ s.closing_cash|floatformat:2 }} ₽
+                    {% else %}
+                        <span style="color: var(--senet-text-muted);">—</span>
+                    {% endif %}
+                </td>
+                <td style="padding: 12px; font-weight: bold;">
+                    {% if s.is_active %}
+                        <span style="color: var(--senet-text-muted);">-</span>
+                    {% elif s.discrepancy is not None %}
+                        <span style="color: {% if s.discrepancy < 0 %}var(--danger){% else %}var(--success){% endif %}">
+                            {{ s.discrepancy|floatformat:2 }} ₽
+                        </span>
+                    {% else %}
+                        <span style="color: var(--senet-text-muted);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</div>
+{% endblock %}

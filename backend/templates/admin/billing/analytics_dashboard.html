@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- Stats Cards -->
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-info">
+                <div class="inner">
+                    <h3>{{ payments_today }} <sup style="font-size: 20px">с.</sup></h3>
+                    <p>Заработано за сегодня</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-money-bill-wave"></i>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-success">
+                <div class="inner">
+                    <h3>{{ total_payments }} <sup style="font-size: 20px">с.</sup></h3>
+                    <p>Заработано за всё время</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-coins"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-warning">
+                <div class="inner">
+                    <h3>{{ total_hours }} <sup style="font-size: 20px">ч</sup></h3>
+                    <p>Оплачено часов</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-6">
+            <div class="small-box bg-danger">
+                <div class="inner">
+                    <h3>{{ total_users }}</h3>
+                    <p>Зарегистрировано пользователей</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-users"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Chart -->
+        <div class="col-md-8">
+            <div class="card card-primary card-outline">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="far fa-chart-bar"></i>
+                        Динамика выручки (Последние 7 дней)
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" style="min-height: 300px; height: 300px; max-height: 300px; max-width: 100%;"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Games -->
+        <div class="col-md-4">
+            <div class="card card-success card-outline">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-gamepad"></i>
+                        Самые популярные игры
+                    </h3>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Название</th>
+                                <th style="width: 40px">Часов</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for game in top_games %}
+                            <tr>
+                                <td>{{ game.name }}</td>
+                                <td><span class="badge bg-success">{{ game.total_hours_played|floatformat:1 }}</span></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center">Нет данных</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ctx = document.getElementById('revenueChart').getContext('2d');
+    var revenueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart_labels|safe }},
+            datasets: [{
+                label: 'Выручка (с.)',
+                data: {{ chart_values|safe }},
+                backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

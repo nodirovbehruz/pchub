@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PCHUB PRO — Visual UI Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+    --senet-bg-dark:     #0b1120;
+    --senet-bg-panel:    #1e293b;
+    --senet-accent:      #8b5cf6;
+    --senet-accent-dim:  rgba(139,92,246,0.12);
+    --senet-text:        #f8fafc;
+    --senet-text-muted:  #94a3b8;
+    --senet-border:      rgba(255,255,255,0.05);
+    --sidebar-width:     250px;
+    --success:           #10b981;
+    --danger:            #ef4444;
+    --warning:           #f59e0b;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background: var(--senet-bg-dark);
+    color: var(--senet-text);
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* ── ROOT LAYOUT ────────────────────────────────────────────────────────── */
+.app-shell {
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ── SIDEBAR ────────────────────────────────────────────────────────────── */
+#senet-sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    background: var(--senet-bg-panel);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--senet-border);
+    z-index: 1000;
+}
+
+.senet-brand {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    text-decoration: none;
+    border-bottom: 1px solid var(--senet-border);
+    flex-shrink: 0;
+}
+.senet-brand-icon {
+    width: 34px; height: 34px;
+    background: var(--senet-accent);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px; color: #fff; flex-shrink: 0;
+}
+.senet-brand-text { font-weight: 900; font-size: 16px; color: #fff; line-height: 1.1; }
+.senet-brand-sub { font-size: 10px; color: var(--senet-text-muted); font-weight: 500; letter-spacing: 1.5px; text-transform: uppercase; }
+
+.senet-nav {
+    flex: 1; padding: 12px 8px;
+    display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
+}
+.senet-nav-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--senet-text-muted);
+    padding: 14px 12px 6px;
+}
+.senet-nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; color: var(--senet-text-muted);
+    text-decoration: none; border-radius: 8px;
+    font-weight: 600; font-size: 14px;
+    transition: background 0.15s, color 0.15s; cursor: pointer;
+}
+.senet-nav-item .nav-icon { width: 20px; text-align: center; font-size: 16px; flex-shrink: 0; }
+.senet-nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.senet-nav-item.active { background: var(--senet-accent-dim); color: var(--senet-accent); font-weight: 700; }
+.senet-nav-item.active .nav-icon { color: var(--senet-accent); }
+
+.senet-user-box {
+    padding: 12px; border-top: 1px solid var(--senet-border);
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.senet-avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--senet-accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: #fff; flex-shrink: 0;
+}
+.senet-user-info { flex: 1; min-width: 0; }
+.senet-user-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.senet-user-role { font-size: 11px; color: var(--senet-text-muted); }
+.senet-logout-btn { color: var(--senet-text-muted); padding: 6px; border-radius: 6px; transition: 0.15s; text-decoration: none; }
+.senet-logout-btn:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
+
+/* ── CONTENT AREA ────────────────────────────────────────────────────────── */
+.content-area {
+    flex: 1; overflow-y: auto;
+    padding: 0;
+    background: var(--senet-bg-dark);
+}
+
+/* ── PREVIEW SECTIONS ────────────────────────────────────────────────────── */
+.preview-section {
+    padding: 28px;
+    border-bottom: 1px solid var(--senet-border);
+}
+.preview-section h2 {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--senet-accent);
+    margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+}
+
+/* ── STATS CARDS ─────────────────────────────────────────────────────────── */
+.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.stat-card {
+    background: var(--senet-bg-panel); border: 1px solid var(--senet-border);
+    border-radius: 12px; padding: 20px;
+}
+.stat-card .label { font-size: 12px; color: var(--senet-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 28px; font-weight: 900; margin: 8px 0 4px; color: #fff; }
+.stat-card .change { font-size: 12px; color: var(--success); display: flex; align-items: center; gap: 4px; }
+.stat-card .icon-box {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; margin-bottom: 12px;
+}
+
+/* ── TABLE ───────────────────────────────────────────────────────────────── */
+.dark-table {
+    width: 100%; border-collapse: collapse;
+    background: var(--senet-bg-panel); border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--senet-border);
+}
+.dark-table th {
+    padding: 12px 16px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--senet-text-muted); text-align: left;
+    border-bottom: 1px solid var(--senet-border);
+    background: rgba(255,255,255,0.02);
+}
+.dark-table td {
+    padding: 14px 16px; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    vertical-align: middle;
+}
+.dark-table tr:last-child td { border-bottom: none; }
+.dark-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+/* ── BADGES ──────────────────────────────────────────────────────────────── */
+.badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 100px;
+    font-size: 12px; font-weight: 700;
+}
+.badge-success { background: rgba(16,185,129,0.1); color: var(--success); }
+.badge-danger  { background: rgba(239,68,68,0.1);  color: var(--danger); }
+.badge-accent  { background: var(--senet-accent-dim); color: var(--senet-accent); }
+.badge-warning { background: rgba(245,158,11,0.1); color: var(--warning); }
+
+/* ── POS PREVIEW ─────────────────────────────────────────────────────────── */
+.pos-preview { display: flex; gap: 20px; height: 320px; }
+.pos-products { flex: 1; background: var(--senet-bg-panel); border-radius: 12px; border: 1px solid var(--senet-border); overflow: hidden; display: flex; flex-direction: column; }
+.pos-products-header { padding: 16px 20px; border-bottom: 1px solid var(--senet-border); font-weight: 700; display: flex; gap: 10px; }
+.pos-grid { padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; overflow-y: auto; }
+.pos-card { background: var(--senet-bg-dark); border: 1px solid var(--senet-border); border-radius: 10px; padding: 14px; cursor: pointer; transition: 0.15s; }
+.pos-card:hover { border-color: var(--senet-accent); transform: translateY(-2px); }
+.pos-card .pos-icon { font-size: 24px; margin-bottom: 8px; }
+.pos-card .pos-name { font-size: 13px; font-weight: 700; }
+.pos-card .pos-price { font-size: 16px; font-weight: 900; color: var(--success); }
+
+.pos-cart { width: 220px; background: var(--senet-bg-panel); border-radius: 12px; border: 1px solid var(--senet-border); display: flex; flex-direction: column; }
+.cart-header { padding: 16px 20px; border-bottom: 1px solid var(--senet-border); font-weight: 800; display: flex; justify-content: space-between; }
+.cart-items { flex: 1; padding: 12px; font-size: 13px; color: var(--senet-text-muted); display: flex; align-items: center; justify-content: center; text-align: center; }
+.cart-footer { padding: 12px; border-top: 1px solid var(--senet-border); }
+.cart-total { display: flex; justify-content: space-between; font-weight: 800; margin-bottom: 10px; }
+.btn-pay { width: 100%; background: var(--senet-accent); color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: 800; cursor: pointer; font-family: 'Inter', sans-serif; font-size: 14px; }
+.btn-pay:hover { background: #7c3aed; }
+
+/* ── SHIFT CARD ──────────────────────────────────────────────────────────── */
+.shift-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.shift-card { background: var(--senet-bg-panel); border: 1px solid var(--senet-border); border-radius: 12px; padding: 24px; }
+.shift-card h3 { font-size: 14px; font-weight: 800; margin-bottom: 16px; color: #fff; display: flex; align-items: center; gap: 10px; }
+.shift-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); font-size: 14px; }
+.shift-row:last-child { border-bottom: none; }
+.shift-val { font-weight: 800; font-family: monospace; font-size: 16px; }
+.shift-total .shift-val { color: var(--success); font-size: 22px; }
+
+/* ── BUTTON GROUP ────────────────────────────────────────────────────────── */
+.btn-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+    padding: 10px 20px; border-radius: 8px; font-weight: 700;
+    font-size: 14px; cursor: pointer; border: none; font-family: 'Inter', sans-serif;
+    display: inline-flex; align-items: center; gap: 8px; transition: 0.15s;
+}
+.btn-primary { background: var(--senet-accent); color: #fff; }
+.btn-primary:hover { background: #7c3aed; }
+.btn-success { background: rgba(16,185,129,0.1); color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+.btn-success:hover { background: rgba(16,185,129,0.2); }
+.btn-danger  { background: rgba(239,68,68,0.1);  color: var(--danger);  border: 1px solid rgba(239,68,68,0.3); }
+.btn-danger:hover  { background: rgba(239,68,68,0.2); }
+.btn-ghost   { background: rgba(255,255,255,0.05); color: var(--senet-text-muted); }
+.btn-ghost:hover   { background: rgba(255,255,255,0.1); color: #fff; }
+
+/* ── SCROLLBAR ───────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* ── WATERMARK ───────────────────────────────────────────────────────────── */
+.watermark {
+    position: fixed; bottom: 12px; right: 16px;
+    font-size: 11px; color: rgba(255,255,255,0.15); pointer-events: none;
+    font-weight: 600; letter-spacing: 0.5px;
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+    <!-- ── SIDEBAR ────────────────────────────────────────────────────────── -->
+    <aside id="senet-sidebar">
+        <a href="#" class="senet-brand">
+            <div class="senet-brand-icon"><i class="fa-solid fa-gamepad"></i></div>
+            <div>
+                <div class="senet-brand-text">PCHUB PRO</div>
+                <div class="senet-brand-sub">Gaming Club</div>
+            </div>
+        </a>
+
+        <nav class="senet-nav">
+            <div class="senet-nav-label">Управление</div>
+            <a class="senet-nav-item active" href="#map">
+                <span class="nav-icon"><i class="fa-solid fa-map-location-dot"></i></span>
+                Карта клуба
+            </a>
+            <a class="senet-nav-item" href="#cash">
+                <span class="nav-icon"><i class="fa-solid fa-cash-register"></i></span>
+                Касса
+            </a>
+            <a class="senet-nav-item" href="#users">
+                <span class="nav-icon"><i class="fa-solid fa-users"></i></span>
+                Пользователи
+            </a>
+
+            <div class="senet-nav-label">Продажи</div>
+            <a class="senet-nav-item" href="#pos">
+                <span class="nav-icon"><i class="fa-solid fa-store"></i></span>
+                POS — Продажи
+            </a>
+            <a class="senet-nav-item" href="#products">
+                <span class="nav-icon"><i class="fa-solid fa-box"></i></span>
+                Товары
+            </a>
+
+            <div class="senet-nav-label">Контент</div>
+            <a class="senet-nav-item" href="#games">
+                <span class="nav-icon"><i class="fa-solid fa-gamepad"></i></span>
+                Игры
+            </a>
+            <a class="senet-nav-item" href="#tariffs">
+                <span class="nav-icon"><i class="fa-solid fa-tag"></i></span>
+                Тарифы
+            </a>
+
+            <div style="flex:1;"></div>
+            <div class="senet-nav-label">Система</div>
+            <a class="senet-nav-item" href="#settings">
+                <span class="nav-icon"><i class="fa-solid fa-gear"></i></span>
+                Все разделы
+            </a>
+        </nav>
+
+        <div class="senet-user-box">
+            <div class="senet-avatar">A</div>
+            <div class="senet-user-info">
+                <div class="senet-user-name">admin</div>
+                <div class="senet-user-role">Администратор</div>
+            </div>
+            <a href="#" class="senet-logout-btn" title="Выйти">
+                <i class="fa-solid fa-right-from-bracket"></i>
+            </a>
+        </div>
+    </aside>
+
+    <!-- ── MAIN CONTENT ────────────────────────────────────────────────────── -->
+    <main class="content-area">
+
+        <!-- Stats -->
+        <div class="preview-section" id="map">
+            <h2><i class="fa-solid fa-chart-bar"></i> Dashboard — Статистика</h2>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="icon-box" style="background:rgba(139,92,246,0.15);color:var(--senet-accent)"><i class="fa-solid fa-users"></i></div>
+                    <div class="label">Посетителей сегодня</div>
+                    <div class="value">24</div>
+                    <div class="change"><i class="fa-solid fa-arrow-up"></i> +12% vs вчера</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon-box" style="background:rgba(16,185,129,0.15);color:var(--success)"><i class="fa-solid fa-wallet"></i></div>
+                    <div class="label">Выручка сегодня</div>
+                    <div class="value">43 500 ₽</div>
+                    <div class="change"><i class="fa-solid fa-arrow-up"></i> +8%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon-box" style="background:rgba(99,102,241,0.15);color:#818cf8"><i class="fa-solid fa-desktop"></i></div>
+                    <div class="label">Компьютеры активны</div>
+                    <div class="value">18 / 24</div>
+                    <div class="change" style="color:var(--senet-text-muted)">6 свободны</div>
+                </div>
+                <div class="stat-card">
+                    <div class="icon-box" style="background:rgba(245,158,11,0.15);color:var(--warning)"><i class="fa-solid fa-clock"></i></div>
+                    <div class="label">Avg. время сессии</div>
+                    <div class="value">2ч 14м</div>
+                    <div class="change" style="color:var(--senet-text-muted)">за сегодня</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Buttons -->
+        <div class="preview-section">
+            <h2><i class="fa-solid fa-cursor"></i> Кнопки & интерактив</h2>
+            <div class="btn-grid">
+                <button class="btn btn-primary"><i class="fa-solid fa-plus"></i> Открыть смену</button>
+                <button class="btn btn-success"><i class="fa-solid fa-check"></i> Подтвердить</button>
+                <button class="btn btn-danger"><i class="fa-solid fa-trash"></i> Удалить</button>
+                <button class="btn btn-ghost"><i class="fa-solid fa-filter"></i> Фильтр</button>
+                <button class="btn btn-ghost"><i class="fa-solid fa-download"></i> Экспорт</button>
+            </div>
+        </div>
+
+        <!-- Badges -->
+        <div class="preview-section">
+            <h2><i class="fa-solid fa-tags"></i> Статусы и метки</h2>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <span class="badge badge-success"><i class="fa-solid fa-circle" style="font-size:8px"></i> Активен</span>
+                <span class="badge badge-danger"><i class="fa-solid fa-circle" style="font-size:8px"></i> Оффлайн</span>
+                <span class="badge badge-accent"><i class="fa-solid fa-crown" style="font-size:11px"></i> VIP</span>
+                <span class="badge badge-warning"><i class="fa-solid fa-clock" style="font-size:11px"></i> Ожидание</span>
+                <span class="badge badge-success">💵 Наличные</span>
+                <span class="badge badge-accent">💳 Карта</span>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="preview-section" id="users">
+            <h2><i class="fa-solid fa-table"></i> Таблица пользователей</h2>
+            <table class="dark-table">
+                <thead>
+                    <tr>
+                        <th>Пользователь</th><th>Баланс</th><th>Статус</th><th>Последний вход</th><th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>player_007</strong><br><span style="color:var(--senet-text-muted);font-size:12px">Обычный игрок</span></td>
+                        <td><span style="color:var(--success);font-weight:800">2ч 45м</span></td>
+                        <td><span class="badge badge-success"><i class="fa-solid fa-circle" style="font-size:8px"></i> Активен</span></td>
+                        <td style="color:var(--senet-text-muted)">Сегодня, 22:15</td>
+                        <td><button class="btn btn-ghost" style="padding:6px 12px;font-size:12px">Подробнее</button></td>
+                    </tr>
+                    <tr>
+                        <td><strong>gamer_pro</strong><br><span style="color:var(--senet-text-muted);font-size:12px">VIP</span></td>
+                        <td><span style="color:var(--success);font-weight:800">5ч 00м</span></td>
+                        <td><span class="badge badge-accent"><i class="fa-solid fa-crown" style="font-size:11px"></i> VIP</span></td>
+                        <td style="color:var(--senet-text-muted)">Вчера, 18:30</td>
+                        <td><button class="btn btn-ghost" style="padding:6px 12px;font-size:12px">Подробнее</button></td>
+                    </tr>
+                    <tr>
+                        <td><strong>noob_2024</strong><br><span style="color:var(--senet-text-muted);font-size:12px">Обычный игрок</span></td>
+                        <td><span style="color:var(--danger);font-weight:800">0м</span></td>
+                        <td><span class="badge badge-danger"><i class="fa-solid fa-circle" style="font-size:8px"></i> Без баланса</span></td>
+                        <td style="color:var(--senet-text-muted)">22 мая</td>
+                        <td><button class="btn btn-primary" style="padding:6px 12px;font-size:12px"><i class="fa-solid fa-plus"></i> Пополнить</button></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- POS -->
+        <div class="preview-section" id="pos">
+            <h2><i class="fa-solid fa-store"></i> POS Терминал Магазина</h2>
+            <div class="pos-preview">
+                <div class="pos-products">
+                    <div class="pos-products-header">
+                        <span style="background:var(--senet-accent);color:#fff;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Все товары</span>
+                        <span style="color:var(--senet-text-muted);padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Напитки</span>
+                        <span style="color:var(--senet-text-muted);padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Еда</span>
+                    </div>
+                    <div class="pos-grid">
+                        <div class="pos-card"><div class="pos-icon">🧃</div><div class="pos-name">Сок апельсин</div><div class="pos-price">120 ₽</div></div>
+                        <div class="pos-card"><div class="pos-icon">🍕</div><div class="pos-name">Пицца</div><div class="pos-price">350 ₽</div></div>
+                        <div class="pos-card" style="border-color:var(--senet-accent)"><div class="pos-icon">🧋</div><div class="pos-name">Кофе</div><div class="pos-price">80 ₽</div></div>
+                        <div class="pos-card"><div class="pos-icon">🎮</div><div class="pos-name">Час игры</div><div class="pos-price">150 ₽</div></div>
+                        <div class="pos-card"><div class="pos-icon">🍔</div><div class="pos-name">Бургер</div><div class="pos-price">280 ₽</div></div>
+                        <div class="pos-card"><div class="pos-icon">🍫</div><div class="pos-name">Шоколад</div><div class="pos-price">95 ₽</div></div>
+                    </div>
+                </div>
+                <div class="pos-cart">
+                    <div class="cart-header">Чек <i class="fa-solid fa-trash" style="color:var(--senet-text-muted);cursor:pointer"></i></div>
+                    <div class="cart-items" style="flex-direction:column;gap:8px;justify-content:flex-start;align-items:stretch;padding:10px">
+                        <div style="background:rgba(255,255,255,0.02);border:1px solid var(--senet-border);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">
+                            <div><div style="font-weight:700;font-size:12px">Кофе</div><div style="font-size:11px;color:var(--senet-text-muted)">80 ₽</div></div>
+                            <div style="background:#0f172a;padding:4px 8px;border-radius:6px;font-weight:800;font-size:13px">×2</div>
+                        </div>
+                        <div style="background:rgba(255,255,255,0.02);border:1px solid var(--senet-border);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">
+                            <div><div style="font-weight:700;font-size:12px">Пицца</div><div style="font-size:11px;color:var(--senet-text-muted)">350 ₽</div></div>
+                            <div style="background:#0f172a;padding:4px 8px;border-radius:6px;font-weight:800;font-size:13px">×1</div>
+                        </div>
+                    </div>
+                    <div class="cart-footer">
+                        <div class="cart-total"><span>Итого:</span><span style="color:var(--success)">510 ₽</span></div>
+                        <button class="btn-pay"><i class="fa-solid fa-wallet"></i> К ОПЛАТЕ</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cash Register -->
+        <div class="preview-section" id="cash">
+            <h2><i class="fa-solid fa-cash-register"></i> Касса — X/Z Отчеты</h2>
+            <div class="shift-grid">
+                <div class="shift-card">
+                    <h3><i class="fa-solid fa-file-invoice-dollar" style="color:var(--senet-accent)"></i> X-Отчет (текущий срез)</h3>
+                    <div class="shift-row"><span style="color:var(--senet-text-muted)">Остаток на начало:</span><span class="shift-val">5 000 ₽</span></div>
+                    <div class="shift-row"><span style="color:var(--senet-text-muted)">Оплаты наличными:</span><span class="shift-val">18 300 ₽</span></div>
+                    <div class="shift-row"><span style="color:var(--senet-text-muted)">Оплаты картой:</span><span class="shift-val">12 700 ₽</span></div>
+                    <div class="shift-row shift-total" style="margin-top:12px;border-top:2px solid var(--senet-border);padding-top:12px">
+                        <span style="font-weight:800;color:#fff">ИТОГО В КАССЕ:</span>
+                        <span class="shift-val" style="color:var(--success);font-size:22px">23 300 ₽</span>
+                    </div>
+                </div>
+                <div class="shift-card">
+                    <h3><i class="fa-solid fa-lock" style="color:var(--danger)"></i> Z-Отчет (закрытие)</h3>
+                    <p style="color:var(--senet-text-muted);font-size:13px;line-height:1.6;margin-bottom:16px">Снятие Z-отчёта навсегда закрывает текущую смену. Введите фактическую сумму наличных в кассе.</p>
+                    <label style="font-size:11px;color:var(--senet-text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.5px">Фактический остаток</label>
+                    <input type="number" value="23300.00" style="width:100%;background:#0f172a;border:1px solid var(--senet-border);color:#fff;padding:12px;border-radius:8px;font-size:18px;font-family:'Inter',sans-serif;margin:8px 0 16px;">
+                    <button class="btn btn-danger" style="width:100%;justify-content:center;padding:14px"><i class="fa-solid fa-lock"></i> СНЯТЬ Z-ОТЧЕТ</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+</div>
+
+<div class="watermark">PCHUB PRO — Visual Preview</div>
+
+<script>
+    // Sidebar active state
+    document.querySelectorAll('.senet-nav-item').forEach(el => {
+        el.addEventListener('click', function(e) {
+            document.querySelectorAll('.senet-nav-item').forEach(x => x.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+</script>
+</body>
+</html>

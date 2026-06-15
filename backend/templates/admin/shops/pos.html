@@ -1,0 +1,393 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Магазин (Касса) - PCHub PRO{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+    /* POS Layout */
+    .pos-container {
+        display: flex;
+        height: 100%;
+        background: var(--senet-bg-dark);
+        color: var(--senet-text);
+        overflow: hidden;
+    }
+
+    /* Left section: Products */
+    .pos-products-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        border-right: 1px solid var(--senet-border);
+    }
+
+    .pos-header {
+        padding: 20px;
+        background: var(--senet-bg-panel);
+        border-bottom: 1px solid var(--senet-border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .category-tabs {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding-bottom: 5px;
+    }
+
+    .category-tab {
+        background: rgba(255,255,255,0.05);
+        color: var(--senet-text-muted);
+        border: 1px solid var(--senet-border);
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        white-space: nowrap;
+        transition: 0.2s;
+    }
+    .category-tab:hover { background: rgba(255,255,255,0.1); }
+    .category-tab.active { background: var(--senet-accent); color: #fff; border-color: var(--senet-accent); }
+
+    .products-grid {
+        padding: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 20px;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .product-card {
+        background: var(--senet-bg-panel);
+        border: 1px solid var(--senet-border);
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .product-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+        border-color: var(--senet-accent);
+    }
+
+    .product-img {
+        height: 120px;
+        background: #0f172a;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+    .product-img img { width: 100%; height: 100%; object-fit: cover; }
+    
+    .product-stock {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: rgba(0,0,0,0.8);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: bold;
+    }
+
+    .product-info { padding: 12px; }
+    .product-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+    .product-price { color: var(--success); font-weight: 800; font-size: 16px; }
+
+    /* Right section: Cart */
+    .pos-cart-area {
+        width: 380px;
+        background: var(--senet-bg-panel);
+        display: flex;
+        flex-direction: column;
+        flex-shrink: 0;
+    }
+
+    .cart-header {
+        padding: 20px;
+        border-bottom: 1px solid var(--senet-border);
+        font-weight: 800;
+        font-size: 18px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .cart-items {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .cart-empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--senet-text-muted);
+        font-style: italic;
+    }
+
+    .cart-item {
+        background: rgba(255,255,255,0.02);
+        border: 1px solid var(--senet-border);
+        padding: 12px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .cart-item-info { flex: 1; }
+    .cart-item-name { font-weight: 700; font-size: 14px; }
+    .cart-item-price { color: var(--senet-text-muted); font-size: 12px; }
+
+    .qty-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: #0f172a;
+        padding: 4px;
+        border-radius: 6px;
+    }
+    .qty-btn { background: none; border: none; color: #fff; cursor: pointer; padding: 4px; border-radius: 4px; display:flex; align-items:center; justify-content:center;}
+    .qty-btn:hover { background: rgba(255,255,255,0.1); }
+    .qty { font-weight: bold; width: 20px; text-align: center; }
+
+    .cart-footer {
+        padding: 20px;
+        border-top: 1px solid var(--senet-border);
+        background: #0f172a;
+    }
+
+    .cart-summary { display: flex; justify-content: space-between; font-size: 18px; font-weight: 900; margin-bottom: 15px;}
+    
+    .pay-btn {
+        width: 100%;
+        background: var(--senet-accent);
+        color: #fff;
+        border: none;
+        padding: 15px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 900;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        transition: 0.2s;
+    }
+    .pay-btn:hover { background: var(--senet-accent-hover); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pos-container">
+    <div class="pos-products-area">
+        <div class="pos-header">
+            <h2>Магазин</h2>
+            <div class="category-tabs">
+                <div class="category-tab active" onclick="filterCategory('all')">Все товары</div>
+                {% for cat in categories %}
+                <div class="category-tab" onclick="filterCategory('{{ cat.id }}')">{{ cat.name }}</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="products-grid">
+            {% for p in products %}
+            <div class="product-card" data-cat="{{ p.category.id }}" onclick="addToCart({{ p.id }}, '{{ p.name|escapejs }}', {{ p.price|stringformat:'f' }})">
+                <div class="product-img">
+                    {% if p.main_image %}
+                    <img src="{{ p.main_image.url }}" alt="{{ p.name }}">
+                    {% else %}
+                    <i class="fa-solid fa-box fa-3x" style="color: #334155;"></i>
+                    {% endif %}
+                    <div class="product-stock">{{ p.current_stock }} шт</div>
+                </div>
+                <div class="product-info">
+                    <div class="product-name">{{ p.name }}</div>
+                    <div class="product-price">{{ p.price }} ₽</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="pos-cart-area">
+        <div class="cart-header">
+            Чек
+            <i class="fa-solid fa-trash" style="cursor: pointer; color: var(--senet-text-muted);" onclick="clearCart()"></i>
+        </div>
+        <div class="cart-items" id="cart-items">
+            <div class="cart-empty">Корзина пуста. Выберите товары слева.</div>
+        </div>
+        <div class="cart-footer">
+            <div class="cart-summary">
+                <span>Итого:</span>
+                <span id="cart-total">0.00 ₽</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="pay-btn" style="background: rgba(16, 185, 129, 0.2); border: 1px solid var(--success); color: var(--success);" onclick="processCheckout('cash')">
+                    <i class="fa-solid fa-money-bill"></i> НАЛИЧНЫЕ
+                </button>
+                <button class="pay-btn" style="background: var(--senet-accent); color: white;" onclick="processCheckout('card')">
+                    <i class="fa-solid fa-credit-card"></i> КАРТА
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let cart = {};
+
+    function filterCategory(catId) {
+        document.querySelectorAll('.category-tab').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+
+        document.querySelectorAll('.product-card').forEach(el => {
+            if(catId === 'all' || el.getAttribute('data-cat') == catId) {
+                el.style.display = 'flex';
+            } else {
+                el.style.display = 'none';
+            }
+        });
+    }
+
+    function addToCart(id, name, price) {
+        if(cart[id]) {
+            cart[id].qty += 1;
+        } else {
+            cart[id] = {id, name, price: parseFloat(price), qty: 1};
+        }
+        renderCart();
+    }
+
+    function updateQty(id, change) {
+        if(cart[id]) {
+            cart[id].qty += change;
+            if(cart[id].qty <= 0) {
+                delete cart[id];
+            }
+            renderCart();
+        }
+    }
+
+    function clearCart() {
+        cart = {};
+        renderCart();
+    }
+
+    function renderCart() {
+        const container = document.getElementById('cart-items');
+        container.innerHTML = '';
+        let total = 0;
+        let count = 0;
+
+        for(let id in cart) {
+            count++;
+            const item = cart[id];
+            total += item.price * item.qty;
+            
+            container.innerHTML += `
+                <div class="cart-item">
+                    <div class="cart-item-info">
+                        <div class="cart-item-name">${item.name}</div>
+                        <div class="cart-item-price">${item.price.toFixed(2)} ₽</div>
+                    </div>
+                    <div class="qty-controls">
+                        <button class="qty-btn" onclick="updateQty(${id}, -1)"><i class="fa-solid fa-minus"></i></button>
+                        <span class="qty">${item.qty}</span>
+                        <button class="qty-btn" onclick="updateQty(${id}, 1)"><i class="fa-solid fa-plus"></i></button>
+                    </div>
+                </div>
+            `;
+        }
+
+        if(count === 0) {
+            container.innerHTML = '<div class="cart-empty">Корзина пуста. Выберите товары слева.</div>';
+        }
+
+        document.getElementById('cart-total').innerText = total.toFixed(2) + ' ₽';
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                // Does this cookie string begin with the name we want?
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    async function processCheckout(paymentMethod) {
+        if(Object.keys(cart).length === 0) {
+            alert("Корзина пуста");
+            return;
+        }
+        
+        const items = Object.values(cart).map(item => ({
+            id: item.id,
+            qty: item.qty
+        }));
+
+        try {
+            const response = await fetch("", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie('csrftoken')
+                },
+                body: JSON.stringify({
+                    items: items,
+                    payment_method: paymentMethod
+                })
+            });
+            const data = await response.json();
+            
+            if (response.ok) {
+                // Success popup, then clear cart
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Успешно',
+                    text: data.message,
+                    background: 'var(--senet-bg-panel)',
+                    color: 'white',
+                    confirmButtonColor: 'var(--senet-accent)'
+                });
+                clearCart();
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Ошибка',
+                    text: data.message,
+                    background: 'var(--senet-bg-panel)',
+                    color: 'white',
+                    confirmButtonColor: 'var(--senet-accent)'
+                });
+            }
+        } catch(e) {
+            alert("Ошибка сети: " + e);
+        }
+    }
+</script>
+{% endblock %}

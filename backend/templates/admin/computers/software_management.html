@@ -1,0 +1,826 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}Software Management — PCHub{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">Home</a>
+    &rsaquo; Software Management
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* ── Reset admin chrome ─────────────────────────────────────────── */
+    html, body { width: 100% !important; }
+    #container  { max-width: none !important; width: 100% !important; }
+    .main       { max-width: none !important; width: 100% !important; display: block !important; }
+    #main       { max-width: none !important; width: 100% !important; }
+    #content    { max-width: none !important; width: 100% !important; padding: 20px 28px !important; box-sizing: border-box !important; float: none !important; }
+    #content-main { max-width: none !important; width: 100% !important; float: none !important; }
+    #content-related { display: none !important; }
+    #nav-sidebar { display: none !important; }
+    .toggle-nav-sidebar { display: none !important; }
+
+    /* ── Base ───────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    .sm-page {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #e9d5ff;
+    }
+
+    /* ── Ambient glows ──────────────────────────────────────────────── */
+    body::before {
+        content: ""; position: fixed; top: -150px; left: -150px;
+        width: 600px; height: 600px;
+        background: radial-gradient(circle, rgba(139,92,246,.13) 0%, transparent 70%);
+        pointer-events: none; z-index: 0;
+    }
+    body::after {
+        content: ""; position: fixed; bottom: -100px; right: -100px;
+        width: 500px; height: 500px;
+        background: radial-gradient(circle, rgba(217,70,239,.10) 0%, transparent 70%);
+        pointer-events: none; z-index: 0;
+    }
+
+    /* ── Glass ──────────────────────────────────────────────────────── */
+    .glass {
+        background: rgba(30, 16, 60, 0.55);
+        backdrop-filter: blur(18px) saturate(160%);
+        -webkit-backdrop-filter: blur(18px) saturate(160%);
+        border: 1px solid rgba(160, 110, 255, 0.22);
+        border-radius: 20px;
+    }
+
+    /* ── Page header ────────────────────────────────────────────────── */
+    .page-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 24px;
+    }
+    .page-title {
+        font-size: 26px; font-weight: 800; color: #f0e8ff; letter-spacing: -.4px;
+        display: flex; align-items: center; gap: 12px;
+    }
+    .page-title svg { color: #c084fc; }
+    .page-sub { font-size: 13px; color: rgba(180,160,220,.55); margin-top: 4px; }
+
+    /* ── Two-column layout ──────────────────────────────────────────── */
+    .layout { display: grid; grid-template-columns: 1fr 1.4fr; gap: 22px; align-items: start; }
+    @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+    /* ── Panel ──────────────────────────────────────────────────────── */
+    .panel { padding: 32px 36px; }
+    .panel-title {
+        font-size: 16px; font-weight: 800; color: #e9d5ff;
+        display: flex; align-items: center; gap: 9px;
+        margin: 0 0 26px;
+    }
+    .panel-title svg { width: 18px; height: 18px; color: #c084fc; }
+
+    /* ── Section label ──────────────────────────────────────────────── */
+    .sec-label {
+        font-size: 10px; font-weight: 700; color: rgba(192,132,252,.6);
+        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
+        display: flex; align-items: center; gap: 6px;
+    }
+    .sec-label svg { width: 12px; height: 12px; }
+
+    /* ── Computer selector ──────────────────────────────────────────── */
+    .computer-grid {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 10px; margin-bottom: 24px; max-height: 260px;
+        overflow-y: auto; padding-right: 4px;
+    }
+    .computer-grid::-webkit-scrollbar { width: 4px; }
+    .computer-grid::-webkit-scrollbar-track { background: rgba(139,92,246,.08); border-radius: 4px; }
+    .computer-grid::-webkit-scrollbar-thumb { background: rgba(139,92,246,.4); border-radius: 4px; }
+
+    .pc-card {
+        background: rgba(255,255,255,.04);
+        border: 1.5px solid rgba(139,92,246,.2);
+        border-radius: 12px; padding: 14px 16px;
+        cursor: pointer; transition: all .18s ease;
+        position: relative; text-align: left;
+        width: 100%;
+    }
+    .pc-card:hover { border-color: rgba(167,139,250,.55); transform: translateY(-1px); }
+    .pc-card.selected {
+        border-color: #a855f7;
+        background: rgba(139,92,246,.15);
+        box-shadow: 0 0 0 3px rgba(168,85,247,.2);
+    }
+    .pc-check {
+        position: absolute; top: 8px; right: 8px;
+        width: 18px; height: 18px;
+        background: linear-gradient(135deg,#7c3aed,#a855f7);
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        opacity: 0; transition: opacity .15s;
+    }
+    .pc-card.selected .pc-check { opacity: 1; }
+    .pc-check svg { width: 9px; height: 9px; color: #fff; }
+    .pc-status-dot {
+        width: 7px; height: 7px; border-radius: 50%; display: inline-block; margin-right: 5px;
+        flex-shrink: 0;
+    }
+    .dot-online   { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+    .dot-offline  { background: #6b7280; }
+    .dot-maintenance { background: #f59e0b; box-shadow: 0 0 6px #f59e0b; }
+    .dot-disabled { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+    .pc-name  { font-size: 13px; font-weight: 700; color: #e9d5ff; margin-bottom: 5px; padding-right: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pc-meta  { font-size: 11px; color: rgba(180,160,220,.5); display: flex; align-items: center; }
+
+    /* ── Game select ────────────────────────────────────────────────── */
+    .field-group { margin-bottom: 20px; }
+    .sm-page select, .sm-page input[type="text"] {
+        display: block; width: 100%;
+        background: rgba(255,255,255,.06);
+        border: 1.5px solid rgba(139,92,246,.28);
+        border-radius: 10px;
+        color: #e9d5ff;
+        padding: 12px 16px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color .15s, box-shadow .15s;
+        -webkit-appearance: none; appearance: none;
+    }
+    .sm-page select:focus, .sm-page input[type="text"]:focus {
+        border-color: rgba(167,139,250,.75);
+        box-shadow: 0 0 0 3px rgba(139,92,246,.2);
+    }
+    .sm-page select option { background: #1e1040; color: #e9d5ff; }
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+        content: ""; position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+        border-left: 5px solid transparent; border-right: 5px solid transparent;
+        border-top: 6px solid rgba(192,132,252,.6); pointer-events: none;
+    }
+
+    /* ── Command type ───────────────────────────────────────────────── */
+    .cmd-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 24px; }
+    .cmd-btn {
+        background: rgba(255,255,255,.04);
+        border: 1.5px solid rgba(139,92,246,.2);
+        border-radius: 12px; padding: 16px 14px;
+        cursor: pointer; transition: all .18s; text-align: center; width: 100%;
+        position: relative;
+    }
+    .cmd-btn:hover { border-color: rgba(167,139,250,.5); transform: translateY(-1px); }
+    .cmd-btn.selected { border-color: #a855f7; background: rgba(139,92,246,.16); box-shadow: 0 0 0 3px rgba(168,85,247,.18); }
+    .cmd-icon { font-size: 22px; margin-bottom: 5px; }
+    .cmd-label { font-size: 12px; font-weight: 700; color: #e9d5ff; }
+    .cmd-desc  { font-size: 10px; color: rgba(192,132,252,.5); margin-top: 3px; }
+
+    /* ── Detail fields ──────────────────────────────────────────────── */
+    .detail-fields { display: none; }
+    .detail-fields.visible { display: block; }
+    .field-label {
+        font-size: 10px; font-weight: 700; color: rgba(192,132,252,.65);
+        text-transform: uppercase; letter-spacing: .8px;
+        margin-bottom: 7px;
+        display: flex; align-items: center; gap: 5px;
+    }
+    .field-label svg { width: 11px; height: 11px; }
+    .field-hint { font-size: 11px; color: rgba(180,160,220,.4); margin-top: 5px; }
+    .divider { border: none; border-top: 1px solid rgba(139,92,246,.15); margin: 22px 0; }
+
+    /* ── Submit button ──────────────────────────────────────────────── */
+    .btn-submit {
+        display: flex; align-items: center; justify-content: center; gap: 9px;
+        background: linear-gradient(135deg, #7c3aed, #a855f7);
+        border: none; color: #fff;
+        padding: 14px 32px; border-radius: 12px;
+        font-weight: 800; font-size: 15px; cursor: pointer;
+        transition: all .2s; width: 100%; letter-spacing: .2px;
+        opacity: .35; pointer-events: none;
+    }
+    .btn-submit svg { width: 18px; height: 18px; }
+    .btn-submit.ready { opacity: 1; pointer-events: auto; box-shadow: 0 4px 24px rgba(139,92,246,.45); }
+    .btn-submit.ready:hover { background: linear-gradient(135deg,#6d28d9,#9333ea); transform: translateY(-1px); box-shadow: 0 8px 30px rgba(139,92,246,.55); }
+    .btn-submit.loading { opacity: .6; pointer-events: none; }
+
+    /* ── Toast ──────────────────────────────────────────────────────── */
+    #toast {
+        position: fixed; bottom: 28px; right: 28px;
+        padding: 14px 22px; border-radius: 12px;
+        font-size: 14px; font-weight: 600;
+        display: none; z-index: 9999;
+        backdrop-filter: blur(12px);
+        animation: slideIn .25s ease;
+    }
+    #toast.success { background: rgba(34,197,94,.18); border: 1px solid rgba(34,197,94,.45); color: #86efac; }
+    #toast.error   { background: rgba(239,68,68,.15);  border: 1px solid rgba(239,68,68,.4);  color: #fca5a5; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ── Command queue ──────────────────────────────────────────────── */
+    .tab-bar {
+        display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .tab {
+        padding: 7px 16px; border-radius: 20px;
+        border: 1.5px solid rgba(139,92,246,.2);
+        background: transparent; color: rgba(192,132,252,.6);
+        font-size: 12px; font-weight: 700; cursor: pointer;
+        transition: all .15s; letter-spacing: .2px;
+    }
+    .tab:hover { border-color: rgba(167,139,250,.5); color: #e9d5ff; }
+    .tab.active { background: rgba(139,92,246,.2); border-color: #a855f7; color: #e9d5ff; }
+    .tab .count {
+        display: inline-flex; align-items: center; justify-content: center;
+        background: rgba(139,92,246,.3); color: #c084fc;
+        border-radius: 10px; font-size: 10px; font-weight: 800;
+        padding: 1px 7px; margin-left: 6px;
+    }
+
+    /* ── Command list ───────────────────────────────────────────────── */
+    .cmd-list { display: flex; flex-direction: column; gap: 10px; max-height: 560px; overflow-y: auto; padding-right: 4px; }
+    .cmd-list::-webkit-scrollbar { width: 4px; }
+    .cmd-list::-webkit-scrollbar-track { background: rgba(139,92,246,.08); border-radius: 4px; }
+    .cmd-list::-webkit-scrollbar-thumb { background: rgba(139,92,246,.4); border-radius: 4px; }
+
+    .cmd-row {
+        background: rgba(255,255,255,.04);
+        border: 1px solid rgba(139,92,246,.15);
+        border-radius: 12px; padding: 14px 18px;
+        display: flex; align-items: center; gap: 14px;
+        transition: border-color .15s;
+    }
+    .cmd-row:hover { border-color: rgba(167,139,250,.3); }
+    .cmd-row-icon { font-size: 22px; flex-shrink: 0; }
+    .cmd-row-info { flex: 1; min-width: 0; }
+    .cmd-row-title {
+        font-size: 13px; font-weight: 700; color: #e9d5ff;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cmd-row-meta { font-size: 11px; color: rgba(180,160,220,.5); margin-top: 3px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .cmd-row-actions { display: flex; gap: 7px; flex-shrink: 0; }
+
+    /* ── Status badge ───────────────────────────────────────────────── */
+    .status-badge {
+        padding: 3px 10px; border-radius: 10px;
+        font-size: 10px; font-weight: 800; letter-spacing: .3px;
+        white-space: nowrap;
+    }
+    .s-pending     { background: rgba(251,191,36,.15); color: #fbbf24; border: 1px solid rgba(251,191,36,.3); }
+    .s-in_progress { background: rgba(59,130,246,.15); color: #93c5fd; border: 1px solid rgba(59,130,246,.3); }
+    .s-completed   { background: rgba(34,197,94,.15);  color: #86efac; border: 1px solid rgba(34,197,94,.3); }
+    .s-failed      { background: rgba(239,68,68,.12);  color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+    .s-cancelled   { background: rgba(107,114,128,.1); color: #9ca3af; border: 1px solid rgba(107,114,128,.25); }
+
+    /* ── Icon buttons ───────────────────────────────────────────────── */
+    .icon-btn {
+        width: 30px; height: 30px;
+        background: rgba(255,255,255,.05);
+        border: 1px solid rgba(139,92,246,.22);
+        border-radius: 8px;
+        color: rgba(192,132,252,.7);
+        cursor: pointer; font-size: 13px;
+        display: flex; align-items: center; justify-content: center;
+        transition: all .15s;
+    }
+    .icon-btn:hover { background: rgba(139,92,246,.15); border-color: rgba(167,139,250,.5); color: #e9d5ff; }
+    .icon-btn.cancel:hover { background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.4); color: #fca5a5; }
+    .icon-btn.requeue:hover { background: rgba(34,197,94,.1); border-color: rgba(34,197,94,.35); color: #86efac; }
+
+    /* ── Empty state ────────────────────────────────────────────────── */
+    .empty-state {
+        text-align: center; padding: 48px 20px;
+        color: rgba(192,132,252,.4); font-size: 14px;
+    }
+    .empty-state svg { width: 40px; height: 40px; margin-bottom: 12px; opacity: .3; }
+
+    /* ── Refresh bar ────────────────────────────────────────────────── */
+    .refresh-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 16px;
+    }
+    .refresh-btn {
+        background: rgba(255,255,255,.04); border: 1px solid rgba(139,92,246,.2);
+        border-radius: 8px; padding: 6px 12px; color: rgba(192,132,252,.6);
+        font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 5px;
+        transition: all .15s;
+    }
+    .refresh-btn:hover { border-color: rgba(167,139,250,.5); color: #e9d5ff; }
+    .refresh-btn svg { width: 13px; height: 13px; }
+    .refresh-btn.spinning svg { animation: spin .6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .last-refresh { font-size: 11px; color: rgba(180,160,220,.3); }
+
+    /* ── Payload detail expand ──────────────────────────────────────── */
+    .payload-preview {
+        font-size: 10px; font-family: monospace; color: rgba(192,132,252,.45);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px;
+    }
+</style>
+
+<div class="sm-page">
+
+    <!-- ── Page header ─────────────────────────────────────────────── -->
+    <div class="page-header">
+        <div>
+            <div class="page-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                </svg>
+                Software Management
+            </div>
+            <div class="page-sub">Queue install, update, or uninstall commands for any gaming PC</div>
+        </div>
+    </div>
+
+    <!-- ── Layout ──────────────────────────────────────────────────── -->
+    <div class="layout">
+
+        <!-- ══ LEFT: Create Command ══════════════════════════════════ -->
+        <div class="panel glass">
+            <div class="panel-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+                </svg>
+                New Command
+            </div>
+
+            <!-- Step 1: Computer -->
+            <div class="sec-label" style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    Step 1 — Select Computers
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button type="button" class="tab" style="padding: 4px 10px; font-size: 10px;" onclick="selectAllPCs(true)">Select All</button>
+                    <button type="button" class="tab" style="padding: 4px 10px; font-size: 10px;" onclick="selectAllPCs(false)">Clear</button>
+                </div>
+            </div>
+            <div class="computer-grid" id="computerGrid">
+                {% for pc in computers %}
+                <button type="button" class="pc-card" data-id="{{ pc.id }}" onclick="selectComputer(this)">
+                    <div class="pc-check">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div class="pc-name">PC #{{ pc.pc_number|default:"?" }} - {{ pc.name }}</div>
+                    <div class="pc-meta">
+                        <span class="pc-status-dot dot-{{ pc.status|lower }}"></span>
+                        {{ pc.get_status_display }}
+                    </div>
+                </button>
+                {% empty %}
+                <div style="color:rgba(192,132,252,.4);font-size:13px;grid-column:1/-1;padding:12px 0">No computers registered.</div>
+                {% endfor %}
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Step 2: Game -->
+            <div id="gameSection">
+            <div class="sec-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6h.01M10 10h.01"/><path d="M21 6H3a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2z"/></svg>
+                Step 2 — Select Game (optional)
+            </div>
+            <div class="field-group">
+                <div class="select-wrap">
+                    <select id="gameSelect">
+                        <option value="">— No specific game —</option>
+                        {% for game in games %}
+                        <option value="{{ game.id }}">{{ game.name }}{% if game.steam_app_id %} (Steam {{ game.steam_app_id }}){% else %} (Local){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Step 3: Command type -->
+            <div class="sec-label">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                Step 3 — Command Type
+            </div>
+            <div class="cmd-grid">
+                <button type="button" class="cmd-btn" data-type="install" onclick="selectCmd(this)">
+                    <div class="cmd-icon">📥</div>
+                    <div class="cmd-label">Install</div>
+                    <div class="cmd-desc">Run installer on PC</div>
+                </button>
+                <button type="button" class="cmd-btn" data-type="reinstall" onclick="selectCmd(this)">
+                    <div class="cmd-icon">♻️</div>
+                    <div class="cmd-label">Reinstall</div>
+                    <div class="cmd-desc">Uninstall then install</div>
+                </button>
+                <button type="button" class="cmd-btn" data-type="uninstall" onclick="selectCmd(this)">
+                    <div class="cmd-icon">🗑️</div>
+                    <div class="cmd-label">Uninstall</div>
+                    <div class="cmd-desc">Remove from PC</div>
+                </button>
+                <button type="button" class="cmd-btn" data-type="update" onclick="selectCmd(this)">
+                    <div class="cmd-icon">⬆️</div>
+                    <div class="cmd-label">Update</div>
+                    <div class="cmd-desc">Run new installer</div>
+                </button>
+                <button type="button" class="cmd-btn" data-type="update_app" onclick="selectCmd(this)">
+                    <div class="cmd-icon">🔄</div>
+                    <div class="cmd-label">Update App</div>
+                    <div class="cmd-desc">Update PCHub itself</div>
+                </button>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Step 4: Details -->
+            <div id="detailSection" class="detail-fields">
+                <div class="sec-label">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                    Step 4 — Details
+                </div>
+
+                <!-- install / reinstall / update fields -->
+                <div id="installerFields">
+                    <div class="field-group">
+                        <div class="field-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            Installer URL / Path <span style="color:#f87171;margin-left:2px;">*</span>
+                        </div>
+                        <input type="text" id="installerUrl" placeholder="\\ServerPC\Games\update.bat  or  https://...">
+                        <div class="field-hint">Network share, UNC path, or download URL</div>
+                        
+                        <!-- Mini Hint Box -->
+                        <div style="background:rgba(139,92,246,0.1); border-radius:10px; padding:12px; margin-top:10px; border:1px dashed rgba(139,92,246,0.3);">
+                            <div style="font-size:11px; font-weight:800; color:#c084fc; margin-bottom:5px; text-transform:uppercase;">💡 Pro-Tip: For large game folders</div>
+                            <div style="font-size:11px; color:#e9d5ff; line-height:1.4;">
+                                Create a <b>.bat</b> file on your server to sync files fast:<br>
+                                <code style="color:#fcd34d; background:rgba(0,0,0,0.2); padding:2px 4px; border-radius:4px; display:block; margin:4px 0;">robocopy "\\SERVER\Games\AmongUs" "C:\Games\AmongUs" /MIR</code>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                            Installer Arguments
+                        </div>
+                        <input type="text" id="installArgs" value="/S" placeholder="/S  /silent  /quiet">
+                        <div class="field-hint">Silent-install flags — default: /S</div>
+                    </div>
+                    <div class="field-group">
+                        <div class="field-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                            Install Destination Path
+                        </div>
+                        <input type="text" id="installPath" placeholder="C:\Games\GameName  (leave empty for default)">
+                    </div>
+                </div>
+
+                <!-- uninstall fields -->
+                <div id="uninstallerFields" style="display:none">
+                    <div class="field-group">
+                        <div class="field-label">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                            Uninstaller Path <span style="color:#f87171;margin-left:2px;">*</span>
+                        </div>
+                        <input type="text" id="uninstallPath" placeholder="C:\Program Files\GameName\uninstall.exe">
+                        <div class="field-hint">Full path to the uninstaller on the target PC</div>
+                    </div>
+                </div>
+
+                <div class="divider"></div>
+            </div>
+
+            <!-- Submit -->
+            <button type="button" class="btn-submit" id="submitBtn" onclick="submitCommand()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Queue Command
+            </button>
+        </div>
+
+        <!-- ══ RIGHT: Command Queue ═══════════════════════════════════ -->
+        <div class="panel glass">
+            <div class="panel-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                    <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                </svg>
+                Command Queue
+            </div>
+
+            <div class="refresh-bar">
+                <div class="tab-bar" id="tabBar">
+                    <button class="tab active" data-filter="all" onclick="setFilter(this)">All <span class="count" id="cnt-all">0</span></button>
+                    <button class="tab" data-filter="pending"     onclick="setFilter(this)">Pending <span class="count" id="cnt-pending">0</span></button>
+                    <button class="tab" data-filter="in_progress" onclick="setFilter(this)">Running <span class="count" id="cnt-in_progress">0</span></button>
+                    <button class="tab" data-filter="completed"   onclick="setFilter(this)">Done <span class="count" id="cnt-completed">0</span></button>
+                    <button class="tab" data-filter="failed"      onclick="setFilter(this)">Failed <span class="count" id="cnt-failed">0</span></button>
+                </div>
+                <button class="refresh-btn" id="refreshBtn" onclick="loadCommands()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div class="last-refresh" id="lastRefresh"></div>
+
+            <div class="cmd-list" id="cmdList">
+                <div class="empty-state">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Loading commands…
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /layout -->
+</div><!-- /sm-page -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+const CSRF = '{{ csrf_token }}';
+const CREATE_URL  = '{% url "admin:computers_sw_create" %}';
+const CANCEL_URL  = '{% url "admin:computers_sw_cancel" 0 %}'.replace('/0/', '/');
+const REQUEUE_URL = '{% url "admin:computers_sw_requeue" 0 %}'.replace('/0/', '/');
+const LIST_URL    = '{% url "admin:computers_sw_list" %}';
+
+// ── State ──────────────────────────────────────────────────────────────
+let selectedComputers = [];
+let selectedCmdType   = null;
+let activeFilter      = 'all';
+let allCommands       = [];
+
+// ── Computer selector ──────────────────────────────────────────────────
+function selectComputer(el) {
+    const id = el.dataset.id;
+    if (selectedComputers.includes(id)) {
+        selectedComputers = selectedComputers.filter(i => i !== id);
+        el.classList.remove('selected');
+    } else {
+        selectedComputers.push(id);
+        el.classList.add('selected');
+    }
+    checkReady();
+}
+
+function selectAllPCs(doSelect) {
+    selectedComputers = [];
+    document.querySelectorAll('.pc-card').forEach(card => {
+        if (doSelect) {
+            selectedComputers.push(card.dataset.id);
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    });
+    checkReady();
+}
+
+// ── Command type selector ──────────────────────────────────────────────
+function selectCmd(el) {
+    document.querySelectorAll('.cmd-btn').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    selectedCmdType = el.dataset.type;
+
+    // Show detail section
+    document.getElementById('detailSection').classList.add('visible');
+
+    const isUninstall = selectedCmdType === 'uninstall';
+    const isUpdateApp = selectedCmdType === 'update_app';
+    document.getElementById('installerFields').style.display  = isUninstall ? 'none' : 'block';
+    document.getElementById('uninstallerFields').style.display = isUninstall ? 'block' : 'none';
+    // Hide game selector, args and path for update_app
+    document.getElementById('gameSection').style.display = isUpdateApp ? 'none' : 'block';
+    document.getElementById('installArgs').parentElement.style.display = isUpdateApp ? 'none' : 'block';
+    document.getElementById('installPath').parentElement.style.display = isUpdateApp ? 'none' : 'block';
+
+    checkReady();
+}
+
+// ── Enable submit when minimum required fields are filled ──────────────
+function checkReady() {
+    const btn = document.getElementById('submitBtn');
+    const hasComputers = selectedComputers.length > 0;
+    const hasType      = !!selectedCmdType;
+    let hasPayload     = true;
+
+    if (selectedCmdType === 'uninstall') {
+        hasPayload = document.getElementById('uninstallPath').value.trim().length > 0;
+    } else if (selectedCmdType) {
+        hasPayload = document.getElementById('installerUrl').value.trim().length > 0;
+    }
+
+    if (hasComputers && hasType && hasPayload) {
+        btn.classList.add('ready');
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Queue Command (${selectedComputers.length} ПК)`;
+    } else {
+        btn.classList.remove('ready');
+        btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Queue Command`;
+    }
+}
+
+['installerUrl','installArgs','installPath','uninstallPath'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', checkReady);
+});
+
+// ── Submit ─────────────────────────────────────────────────────────────
+async function submitCommand() {
+    const btn = document.getElementById('submitBtn');
+    const originalContent = btn.innerHTML;
+    btn.classList.add('loading');
+    btn.classList.remove('ready');
+
+    const isUninstall = selectedCmdType === 'uninstall';
+    const payload = isUninstall
+        ? { uninstall_path: document.getElementById('uninstallPath').value.trim() }
+        : {
+            installer_url: document.getElementById('installerUrl').value.trim(),
+            install_args:  document.getElementById('installArgs').value.trim() || '/S',
+            install_path:  document.getElementById('installPath').value.trim(),
+          };
+
+    const gameId = document.getElementById('gameSelect').value || null;
+    let successCount = 0;
+    let failCount = 0;
+
+    // Process all computers in parallel
+    const promises = selectedComputers.map(async (pcId) => {
+        try {
+            const res = await fetch(CREATE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+                body: JSON.stringify({
+                    computer_id:  parseInt(pcId),
+                    game_id:      gameId,
+                    command_type: selectedCmdType,
+                    payload,
+                }),
+            });
+            if (res.ok) successCount++;
+            else failCount++;
+        } catch (e) {
+            failCount++;
+        }
+    });
+
+    await Promise.all(promises);
+
+    if (successCount > 0) {
+        showToast(`✅ Queued ${successCount} commands successfully!` + (failCount > 0 ? ` (${failCount} failed)` : ''), 'success');
+        resetForm();
+        loadCommands();
+    } else if (failCount > 0) {
+        showToast(`❌ Failed to queue commands for ${failCount} computers.`, 'error');
+    }
+
+    btn.classList.remove('loading');
+    btn.innerHTML = originalContent;
+    checkReady();
+}
+
+function resetForm() {
+    document.querySelectorAll('.pc-card').forEach(c => c.classList.remove('selected'));
+    document.querySelectorAll('.cmd-btn').forEach(c => c.classList.remove('selected'));
+    document.getElementById('gameSelect').value = '';
+    document.getElementById('installerUrl').value = '';
+    document.getElementById('installArgs').value = '/S';
+    document.getElementById('installPath').value = '';
+    document.getElementById('uninstallPath').value = '';
+    document.getElementById('detailSection').classList.remove('visible');
+    selectedComputers = [];
+    selectedCmdType   = null;
+    checkReady();
+}
+
+// ── Command list ───────────────────────────────────────────────────────
+function setFilter(el) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    activeFilter = el.dataset.filter;
+    renderCommands();
+}
+
+async function loadCommands() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    try {
+        const res = await fetch(LIST_URL);
+        const data = await res.json();
+        allCommands = data.commands || [];
+        updateCounts();
+        renderCommands();
+        document.getElementById('lastRefresh').textContent =
+            'Last updated: ' + new Date().toLocaleTimeString();
+    } catch (e) {
+        console.error(e);
+    } finally {
+        btn.classList.remove('spinning');
+    }
+}
+
+function updateCounts() {
+    const counts = { all: allCommands.length, pending: 0, in_progress: 0, completed: 0, failed: 0 };
+    allCommands.forEach(c => { if (counts[c.status] !== undefined) counts[c.status]++; });
+    Object.entries(counts).forEach(([k, v]) => {
+        const el = document.getElementById('cnt-' + k);
+        if (el) el.textContent = v;
+    });
+}
+
+const CMD_ICONS = { install: '📥', reinstall: '♻️', uninstall: '🗑️', update: '⬆️', update_app: '🔄' };
+
+function renderCommands() {
+    const list = document.getElementById('cmdList');
+    const visible = activeFilter === 'all'
+        ? allCommands
+        : allCommands.filter(c => c.status === activeFilter);
+
+    if (!visible.length) {
+        list.innerHTML = `
+            <div class="empty-state">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                No commands in this category
+            </div>`;
+        return;
+    }
+
+    list.innerHTML = visible.map(c => {
+        const icon  = CMD_ICONS[c.command_type] || '📦';
+        const pUrl  = c.payload?.installer_url || c.payload?.uninstall_path || '';
+        const meta  = [
+            `PC #${c.pc_number || '?'} - ${c.computer_name}`,
+            c.game_name || null,
+            new Date(c.created_at).toLocaleString(),
+        ].filter(Boolean).join(' · ');
+
+        const actions = [];
+        if (c.status === 'pending') {
+            actions.push(`<button class="icon-btn cancel" title="Cancel" onclick="cancelCmd(${c.id})">✕</button>`);
+        }
+        if (c.status === 'failed') {
+            actions.push(`<button class="icon-btn requeue" title="Re-queue" onclick="requeueCmd(${c.id})">↺</button>`);
+        }
+
+        return `
+        <div class="cmd-row" id="row-${c.id}">
+            <div class="cmd-row-icon">${icon}</div>
+            <div class="cmd-row-info">
+                <div class="cmd-row-title">${cap(c.command_type)} — ${c.game_name || 'No game'} → PC #${c.pc_number || '?'}</div>
+                <div class="cmd-row-meta">
+                    <span class="status-badge s-${c.status}">${c.status.replace('_',' ')}</span>
+                    ${meta}
+                </div>
+                ${pUrl ? `<div class="payload-preview">${pUrl}</div>` : ''}
+                ${c.error_message ? `<div style="font-size:11px;color:#fca5a5;margin-top:3px;">⚠ ${c.error_message}</div>` : ''}
+            </div>
+            <div class="cmd-row-actions">${actions.join('')}</div>
+        </div>`;
+    }).join('');
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// ── Cancel ─────────────────────────────────────────────────────────────
+async function cancelCmd(id) {
+    try {
+        const res = await fetch(CANCEL_URL + id + '/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF },
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('Command cancelled', 'success');
+            loadCommands();
+        } else {
+            showToast('❌ ' + (data.detail || 'Error'), 'error');
+        }
+    } catch (e) { showToast('❌ Network error', 'error'); }
+}
+
+// ── Re-queue ───────────────────────────────────────────────────────────
+async function requeueCmd(id) {
+    try {
+        const res = await fetch(REQUEUE_URL + id + '/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': CSRF },
+        });
+        const data = await res.json();
+        if (res.ok) {
+            showToast('✅ Command re-queued as pending', 'success');
+            loadCommands();
+        } else {
+            showToast('❌ ' + (data.detail || 'Error'), 'error');
+        }
+    } catch (e) { showToast('❌ Network error', 'error'); }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = type;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3500);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────
+loadCommands();
+setInterval(loadCommands, 20000);
+</script>
+{% endblock %}

@@ -1,0 +1,51 @@
+repos:
+  # Python code formatting
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        language_version: python3.11
+        args: [--line-length=88]
+        exclude: ^(\.venv/|venv/|env/|\.env/|media/|staticfiles/|locale/|logs/|docker/)
+
+  # Import sorting
+  - repo: https://github.com/pycqa/isort
+    rev: 6.0.1
+    hooks:
+      - id: isort
+        args: [--profile=black, --line-length=88]
+        exclude: ^(\.venv/|venv/|env/|\.env/|media/|staticfiles/|locale/|logs/|docker/)
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(\.venv/|venv/|env/|\.env/|media/|staticfiles/|locale/|logs/|docker/)
+      - id: end-of-file-fixer
+        exclude: ^(\.venv/|venv/|env/|\.env/|media/|staticfiles/|locale/|logs/|docker/)
+      - id: check-yaml
+        exclude: ^(\.venv/|venv/|env/|\.env/)
+      - id: check-json
+        exclude: ^(\.venv/|venv/|env/|\.env/|locale/)
+      - id: pretty-format-json
+        args: [--autofix, --indent=2]
+        exclude: ^(\.venv/|venv/|env/|\.env/|locale/)
+
+  # Typos detection
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.26.1
+    hooks:
+      - id: typos
+        files: ^src/
+        exclude: pw_blacklist\.txt$
+        types_or: [ python, markdown, text ]
+
+
+# Global exclude patterns
+exclude: ^(\.venv/|venv/|env/|\.env/|__pycache__/|\.git/|media/|staticfiles/|locale/|logs/|docker/)
+
+# Configuration for faster execution
+ci:
+  autofix_prs: true
+  autoupdate_commit_msg: "chore: update pre-commit hooks"

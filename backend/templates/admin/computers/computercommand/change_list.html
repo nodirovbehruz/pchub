@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% block object-tools-items %}
+    <li>
+        <a href="{{ software_management_url }}"
+           class="addlink"
+           style="background:linear-gradient(135deg,#7c3aed,#a855f7);border:none;padding:10px 20px;border-radius:10px;font-weight:700;letter-spacing:.2px;">
+            📦 Software Management
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

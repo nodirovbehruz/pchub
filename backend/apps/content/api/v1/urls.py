@@ -1,0 +1,87 @@
+from django.urls import path
+from rest_framework import generics, permissions, serializers as drf_serializers
+
+from apps.clubs.api.v1.mixins import TenantFilterMixin, TenantCreateMixin
+from apps.content.models import News, Task
+
+
+class TaskSerializer(drf_serializers.ModelSerializer):
+    class Meta:
+        model = Task
+        fields = "__all__"
+        read_only_fields = ["id", "created_at", "updated_at", "finished_at", "finished_by"]
+
+
+class NewsSerializer(drf_serializers.ModelSerializer):
+    cover_image_url = drf_serializers.SerializerMethodField()
+
+    class Meta:
+        model = News
+        fields = "__all__"
+        read_only_fields = ["id", "created_at", "updated_at", "cover_image_url"]
+
+    def get_cover_image_url(self, obj):
+        if obj.cover_image:
+            request = self.context.get("request")
+            return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
+        return f"https://picsum.photos/seed/news-{obj.id}/624/352"
+
+
+class TaskListCreateAPIView(TenantCreateMixin, TenantFilterMixin, generics.ListCreateAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Task.objects.all()
+
+    def tenant_create_extra(self):
+        return {"created_by": self.request.user}
+
+
+class TaskDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = Task.objects.all()
+
+
+class NewsListCreateAPIView(TenantCreateMixin, TenantFilterMixin, generics.ListCreateAPIView):
+    serializer_class = NewsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = News.objects.all()
+
+    def get_queryset(self):
+        # Operators (owner/member/admin) see ALL of their club's news (incl. drafts).
+        # Shell CLIENTS are not ClubMembers, so the default tenant filter returned
+        # none() — give them their club's currently-published news (resolved from
+        # ?club=/X-Club-Id) honoring the show_from/show_until display window (#14).
+        from django.db.models import Q
+        from django.utils import timezone
+        from apps.clubs.api.v1.mixins import validated_club_id
+        cid = validated_club_id(self.request)
+        if cid:
+            return News.objects.filter(club_id=cid)
+        raw = (getattr(self.request, "current_club_id", None)
+               or self.request.query_params.get("club")
+               or self.request.META.get("HTTP_X_CLUB_ID"))
+        try:
+            raw = int(raw)
+        except (TypeError, ValueError):
+            return News.objects.none()
+        now = timezone.now()
+        return (News.objects.filter(club_id=raw, is_published=True)
+                .filter(Q(show_from__isnull=True) | Q(show_from__lte=now))
+                .filter(Q(show_until__isnull=True) | Q(show_until__gte=now)))
+
+
+class NewsDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = NewsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = News.objects.all()
+
+
+app_name = "content"
+
+urlpatterns = [
+    path("tasks/", TaskListCreateAPIView.as_view(), name="task-list"),
+    path("tasks/<int:pk>/", TaskDetailAPIView.as_view(), name="task-detail"),
+    path("news/", NewsListCreateAPIView.as_view(), name="news-list"),
+    path("news/<int:pk>/", NewsDetailAPIView.as_view(), name="news-detail"),
+]

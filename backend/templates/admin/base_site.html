@@ -1,0 +1,416 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}PCHub PRO{% endblock %}
+
+{# ── Global Styles & Fonts ─────────────────────────────────────────────────── #}
+{% block extrastyle %}
+{{ block.super }}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+{% if request.user.is_authenticated %}
+<style>
+/* ─── CSS Variables ──────────────────────────────────────────────────────── */
+:root {
+    --senet-bg-dark:     #0b1120;
+    --senet-bg-panel:    #1e293b;
+    --senet-accent:      #8b5cf6;
+    --senet-accent-dim:  rgba(139,92,246,0.12);
+    --senet-text:        #f8fafc;
+    --senet-text-muted:  #94a3b8;
+    --senet-border:      #1e293b;
+    --sidebar-width:     250px;
+    --success:           #10b981;
+    --danger:            #ef4444;
+}
+
+/* ─── Global Reset ───────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', sans-serif !important;
+    background: var(--senet-bg-dark) !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    color: var(--senet-text) !important;
+}
+
+/* ─── Hide all Jazzmin chrome ────────────────────────────────────────────── */
+.main-header,
+.main-sidebar,
+.app-header,
+.navbar,
+nav.navbar {
+    display: none !important;
+}
+
+/* ─── Root layout: sidebar + content side by side ───────────────────────── */
+.wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    height: 100vh !important;
+    width: 100vw !important;
+    overflow: hidden !important;
+}
+
+.content-wrapper {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: var(--senet-bg-dark) !important;
+    overflow-y: auto !important;
+}
+
+/* ─── Sidebar ────────────────────────────────────────────────────────────── */
+#senet-sidebar {
+    width: var(--sidebar-width);
+    flex-shrink: 0;
+    background: var(--senet-bg-panel);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid rgba(255,255,255,0.05);
+    z-index: 1000;
+    position: relative;
+}
+
+/* Brand */
+.senet-brand {
+    height: 64px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 20px;
+    text-decoration: none !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    flex-shrink: 0;
+}
+.senet-brand-icon {
+    width: 34px;
+    height: 34px;
+    background: var(--senet-accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    color: #fff;
+    flex-shrink: 0;
+}
+.senet-brand-text {
+    font-weight: 900;
+    font-size: 16px;
+    letter-spacing: 0.5px;
+    color: #fff;
+    line-height: 1.1;
+}
+.senet-brand-sub {
+    font-size: 10px;
+    color: var(--senet-text-muted);
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+/* Nav */
+.senet-nav {
+    flex: 1;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+}
+.senet-nav-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--senet-text-muted);
+    padding: 14px 12px 6px;
+}
+.senet-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    color: var(--senet-text-muted);
+    text-decoration: none !important;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.15s, color 0.15s;
+    cursor: pointer;
+}
+.senet-nav-item .nav-icon {
+    width: 20px;
+    text-align: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+.senet-nav-item:hover {
+    background: rgba(255,255,255,0.05);
+    color: #fff;
+}
+.senet-nav-item.active {
+    background: var(--senet-accent-dim);
+    color: var(--senet-accent);
+    font-weight: 700;
+}
+.senet-nav-item.active .nav-icon {
+    color: var(--senet-accent);
+}
+
+/* User box */
+.senet-user-box {
+    padding: 12px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+.senet-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--senet-accent), #6366f1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 14px;
+    color: #fff;
+    flex-shrink: 0;
+}
+.senet-user-info { flex: 1; min-width: 0; }
+.senet-user-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.senet-user-role { font-size: 11px; color: var(--senet-text-muted); }
+.senet-logout-btn {
+    color: var(--senet-text-muted);
+    padding: 6px;
+    border-radius: 6px;
+    transition: 0.15s;
+    flex-shrink: 0;
+}
+.senet-logout-btn:hover { background: rgba(239,68,68,0.1); color: #ef4444; }
+
+/* ─── Content area overrides ─────────────────────────────────────────────── */
+.content-header {
+    padding: 20px 28px 10px !important;
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255,255,255,0.05) !important;
+    margin-bottom: 0 !important;
+}
+.content-header h1 {
+    font-size: 22px !important;
+    font-weight: 800 !important;
+    color: #fff !important;
+}
+section.content {
+    padding: 24px 28px !important;
+}
+
+/* Make all tables dark-styled */
+.table {
+    color: var(--senet-text) !important;
+}
+.table th {
+    color: var(--senet-text-muted) !important;
+    font-size: 12px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-color: rgba(255,255,255,0.05) !important;
+}
+.table td {
+    border-color: rgba(255,255,255,0.04) !important;
+    vertical-align: middle !important;
+}
+
+/* Cards */
+.card {
+    background: var(--senet-bg-panel) !important;
+    border: 1px solid rgba(255,255,255,0.06) !important;
+    border-radius: 12px !important;
+}
+.card-header {
+    background: transparent !important;
+    border-bottom: 1px solid rgba(255,255,255,0.06) !important;
+    font-weight: 700 !important;
+    color: #fff !important;
+}
+
+/* Buttons */
+.btn-primary {
+    background: var(--senet-accent) !important;
+    border-color: var(--senet-accent) !important;
+}
+.btn-primary:hover {
+    background: #7c3aed !important;
+    border-color: #7c3aed !important;
+}
+
+/* Breadcrumbs */
+.breadcrumb {
+    background: transparent !important;
+    font-size: 13px;
+}
+
+/* Hide Jazzmin footer / copyright */
+.main-footer, footer.main-footer {
+    display: none !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+</style>
+
+<script type="module">
+    import * as Turbo from 'https://cdn.skypack.dev/@hotwired/turbo';
+    Turbo.start();
+</script>
+{% endif %}
+{% endblock %}
+
+{% block bodyclass %}senet-app{% endblock %}
+
+{# ── Sidebar override ─────────────────────────────────────────────────────── #}
+{% block sidebar %}
+{% if request.user.is_authenticated %}
+<aside id="senet-sidebar">
+
+    {# Brand #}
+    <a href="/admin/" class="senet-brand" data-turbo="false">
+        <div class="senet-brand-icon">
+            <i class="fa-solid fa-gamepad"></i>
+        </div>
+        <div>
+            <div class="senet-brand-text">PCHUB PRO</div>
+            <div class="senet-brand-sub">Gaming Club</div>
+        </div>
+    </a>
+
+    {# Navigation #}
+    <nav class="senet-nav">
+
+        <a href="/admin/billing/shift/dashboard/" class="senet-nav-item" data-path="shift/dashboard">
+            <span class="nav-icon"><i class="fas fa-home"></i></span>
+            Дашборд
+        </a>
+
+        <a href="/admin/computers/computer/" class="senet-nav-item" data-path="computers/computer">
+            <span class="nav-icon"><i class="fas fa-desktop"></i></span>
+            Компьютеры
+        </a>
+
+        <a href="/admin/computers/computer/club-map/" class="senet-nav-item" data-path="club-map">
+            <span class="nav-icon"><i class="fas fa-th-large"></i></span>
+            Карта клуба
+        </a>
+
+        <a href="/admin/billing/shift/dashboard/" class="senet-nav-item" data-path="booking">
+            <span class="nav-icon"><i class="fas fa-calendar-alt"></i></span>
+            Бронирование
+        </a>
+
+        <a href="/admin/shops/product/pos/" class="senet-nav-item" data-path="shops/product/pos">
+            <span class="nav-icon"><i class="fas fa-shopping-cart"></i></span>
+            Магазин
+        </a>
+
+        <a href="/admin/billing/payment/" class="senet-nav-item" data-path="billing/payment">
+            <span class="nav-icon"><i class="fas fa-wallet"></i></span>
+            Платежи
+        </a>
+
+        <a href="/admin/accounts/customuser/" class="senet-nav-item" data-path="accounts/customuser">
+            <span class="nav-icon"><i class="fas fa-user-friends"></i></span>
+            Клиенты
+        </a>
+
+        <a href="/admin/admin/logentry/" class="senet-nav-item" data-path="admin/logentry">
+            <span class="nav-icon"><i class="fas fa-list-ul"></i></span>
+            Логи
+        </a>
+
+        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.05); margin: 10px 12px;" />
+
+        <a href="/admin/shops/product/" class="senet-nav-item" data-path="shops/product">
+            <span class="nav-icon"><i class="fas fa-box"></i></span>
+            Товары и услуги
+        </a>
+
+        <a href="#" class="senet-nav-item" data-path="loyalty">
+            <span class="nav-icon"><i class="fas fa-percent"></i></span>
+            Система лояльности
+        </a>
+
+        <a href="/admin/auth/group/" class="senet-nav-item" data-path="auth">
+            <span class="nav-icon"><i class="fas fa-user-tie"></i></span>
+            Сотрудники
+        </a>
+
+        <a href="#" class="senet-nav-item" data-path="reviews">
+            <span class="nav-icon"><i class="fas fa-comment-dots"></i></span>
+            Отзывы клиентов
+        </a>
+
+        <a href="/admin/games/game/" class="senet-nav-item" data-path="games">
+            <span class="nav-icon"><i class="fas fa-th"></i></span>
+            Контент
+        </a>
+
+        <a href="/admin/billing/shift/dashboard/" class="senet-nav-item" data-path="analytics">
+            <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+            Аналитика
+        </a>
+
+        <a href="/admin/" class="senet-nav-item" data-path="__root__">
+            <span class="nav-icon"><i class="fas fa-cog"></i></span>
+            Настройки
+        </a>
+
+    </nav>
+
+    {# User Box #}
+    <div class="senet-user-box">
+        <div class="senet-avatar">{{ request.user.username.0|upper }}</div>
+        <div class="senet-user-info">
+            <div class="senet-user-name">{{ request.user.username }}</div>
+            <div class="senet-user-role">Администратор</div>
+        </div>
+        <a href="/admin/logout/" class="senet-logout-btn" data-turbo="false" title="Выйти">
+            <i class="fa-solid fa-right-from-bracket"></i>
+        </a>
+    </div>
+
+</aside>
+
+<script>
+    function updateSidebarActive() {
+        const path = window.location.pathname;
+        document.querySelectorAll('#senet-sidebar .senet-nav-item').forEach(el => {
+            el.classList.remove('active');
+            const dp = el.getAttribute('data-path');
+            if (!dp) return;
+            if (dp === '__root__' && path === '/admin/') {
+                el.classList.add('active');
+            } else if (dp !== '__root__' && path.includes(dp)) {
+                el.classList.add('active');
+            }
+        });
+    }
+    // on page load
+    updateSidebarActive();
+    // on every Turbo navigation
+    document.addEventListener('turbo:load', updateSidebarActive);
+</script>
+
+{% endif %}
+{% endblock %}

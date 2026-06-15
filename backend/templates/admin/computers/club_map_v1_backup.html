@@ -1,0 +1,359 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Карта клуба (SENET UI){% endblock %}
+
+{% block content %}
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    :root {
+        --bg-deep: #0b1120;
+        --bg-panel: #1e293b;
+        --accent-purple: #8b5cf6;
+        --success: #10b981;
+        --danger: #ef4444;
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --border: #334155;
+    }
+
+    #content, #content-main, .map-page { width: 100% !important; max-width: none !important; display: block !important; margin:0 !important; padding:0 !important; background: var(--bg-deep); }
+    body { background: var(--bg-deep); height: 100vh; overflow: hidden; font-family: 'Inter', sans-serif; color: var(--text-main); }
+
+    /* ── Header ── */
+    .map-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 24px; background: #0f172a; border-bottom: 1px solid var(--border); height: 64px;
+        position: sticky; top: 0; z-index: 1000;
+    }
+    .header-left, .header-right { display: flex; align-items: center; gap: 20px; }
+    
+    .tab-group { display: flex; background: #1e293b; padding: 4px; border-radius: 12px; }
+    .tab-btn {
+        padding: 8px 20px; border-radius: 10px; border: none; background: transparent; 
+        color: var(--text-muted); font-weight: 600; cursor: pointer; transition: 0.3s;
+    }
+    .tab-btn.active { background: var(--accent-purple); color: #fff; }
+
+    .shift-ctrl {
+        background: #1e293b; border: 1px solid var(--border); padding: 8px 16px; 
+        border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+        display: flex; align-items: center; gap: 10px;
+    }
+    .shift-ctrl.active { border-color: var(--success); color: var(--success); }
+    .shift-ctrl.inactive { border-color: var(--danger); color: var(--danger); }
+
+    /* ── Map Canvas ── */
+    .map-container { display: flex; height: calc(100vh - 64px); background: var(--bg-deep); }
+    .viewport { flex: 1; position: relative; overflow: auto; scrollbar-width: none; cursor: grab; }
+    .canvas { 
+        position: relative; width: 4000px; height: 3000px; 
+        background-image: radial-gradient(#1e293b 1px, transparent 1px);
+        background-size: 40px 40px;
+    }
+
+    /* ── Nodes ── */
+    .node { position: absolute; z-index: 10; user-select: none; }
+    
+    .device-node {
+        width: 60px; height: 50px; background: #1e293b; border-radius: 10px;
+        border: 2px solid transparent; display: flex; flex-direction: column; 
+        align-items: center; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        transition: transform 0.1s, border-color 0.2s;
+    }
+    .device-node:hover { transform: translateY(-2px); }
+    .device-node.selected { border-color: var(--accent-purple); box-shadow: 0 0 20px rgba(139, 92, 246, 0.4); }
+    
+    .device-icon { font-size: 18px; color: var(--text-muted); }
+    .device-num { font-size: 14px; font-weight: 900; }
+    
+    /* Statuses */
+    .online .device-icon { color: #fff; }
+    .busy .device-icon, .guest .device-icon { color: var(--success); }
+    .busy .device-node, .guest .device-node { border-bottom: 4px solid var(--success); }
+    
+    /* Decor Elements */
+    .el-node { color: #475569; font-size: 24px; display: flex; align-items: center; justify-content: center; }
+    .wall-segment { background: #334155; opacity: 0.8; border-radius: 4px; border: 1px solid #475569; }
+
+    /* ── Context Menu ── */
+    .context-menu {
+        position: fixed; background: #1e293b; border: 1px solid var(--border);
+        border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        padding: 8px; z-index: 10000; width: 220px; display: none;
+    }
+    .menu-item {
+        padding: 10px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+        cursor: pointer; display: flex; align-items: center; gap: 12px; transition: 0.2s;
+    }
+    .menu-item:hover { background: #334155; color: var(--accent-purple); }
+    .menu-item.danger:hover { color: var(--danger); }
+
+    /* ── Tooltip ── */
+    .map-tooltip {
+        position: absolute; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(8px);
+        padding: 12px 16px; border-radius: 12px; border: 1px solid var(--border);
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4); z-index: 2000; pointer-events: none;
+        display: none; width: 240px;
+    }
+    .tooltip-header { font-weight: 900; margin-bottom: 8px; border-bottom: 1px solid #2d3748; padding-bottom: 4px; }
+    .tooltip-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+    .tooltip-val { color: var(--success); font-weight: 700; }
+
+    /* ── Config HUD ── */
+    .config-btns { position: absolute; top: -25px; right: -25px; display: none; gap: 5px; }
+    .config-btn { 
+        width: 24px; height: 24px; border-radius: 50%; border: none; 
+        background: #334155; color: #fff; font-size: 10px; cursor: pointer;
+    }
+    .config-btn:hover { background: var(--accent-purple); }
+</style>
+
+<div class="map-page">
+    <div class="map-header">
+        <div class="header-left">
+            <h1 class="map-title">CLUB MAP</h1>
+            <div class="tab-group">
+                <button class="tab-btn active" id="btnManage" onclick="setMode('manage')">Управление</button>
+                <button class="tab-btn" id="btnConfig" onclick="setMode('config')">Настройка</button>
+            </div>
+        </div>
+        <div class="header-right">
+            <div id="shiftBadge" class="shift-ctrl {% if active_shift %}active{% else %}inactive{% endif %}" onclick="toggleShiftModal()">
+                <i class="fas fa-key"></i>
+                <span id="shiftLabel">{% if active_shift %}СМЕНА: {{ active_shift.admin.username }}{% else %}СМЕНА ЗАКРЫТА{% endif %}</span>
+            </div>
+            <button class="tab-btn" onclick="clearSelection()">Снять все</button>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div class="viewport" id="viewport">
+            <div class="canvas" id="canvas">
+                <!-- PCs -->
+                {% for pc in computers %}
+                <div class="node device-node {{ pc.status }}" 
+                     id="pc-{{ pc.id }}" data-id="{{ pc.id }}" data-type="pc" 
+                     data-num="{{ pc.pc_number }}"
+                     style="left: {{ pc.position_x|default:200 }}px; top: {{ pc.position_y|default:200 }}px;"
+                     oncontextmenu="showMenu(event, '{{ pc.id }}')"
+                     onmouseenter="showTooltip(event, '{{ pc.id }}')"
+                     onmouseleave="hideTooltip()"
+                     onmousedown="dragStart(event, this)"
+                     onclick="handleNodeClick(event, '{{ pc.id }}')">
+                    <i class="fas fa-desktop device-icon"></i>
+                    <div class="device-num">{{ pc.pc_number|default:pc.id }}</div>
+                </div>
+                {% endfor %}
+
+                <!-- Elements -->
+                {% for el in elements %}
+                <div class="node el-node {{ el.element_type }} {% if 'wall' in el.element_type %}wall-segment{% endif %}"
+                     id="el-{{ el.id }}" data-id="{{ el.id }}" data-type="el"
+                     style="left: {{ el.position_x }}px; top: {{ el.position_y }}px; width: {{ el.width }}px; height: {{ el.height }}px; transform: rotate({{ el.rotation }}deg);"
+                     onmousedown="dragStart(event, this)">
+                    <div class="config-btns">
+                        <button class="config-btn" onclick="rotateEl('{{ el.id }}')"><i class="fas fa-sync"></i></button>
+                        <button class="config-btn" onclick="deleteEl('{{ el.id }}')"><i class="fas fa-times"></i></button>
+                    </div>
+                    {% if el.element_type == 'door' %}<i class="fas fa-door-open"></i>
+                    {% elif el.element_type == 'sofa' %}<i class="fas fa-couch"></i>
+                    {% elif 'wall' in el.element_type %}<i class="fas fa-border-all" style="font-size:10px; opacity:0.3;"></i>
+                    {% else %}<i class="fas fa-cube"></i>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Context Menu Element -->
+<div id="contextMenu" class="context-menu"></div>
+<!-- Tooltip Element -->
+<div id="mapTooltip" class="map-tooltip"></div>
+
+<!-- Shift Modal (Same logic but styled) -->
+<div id="shiftModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:10001; align-items:center; justify-content:center;">
+    <div style="background:#1e293b; padding:30px; border-radius:20px; width:360px; text-align:center;">
+        <h2>СМЕНА</h2>
+        <div id="shiftActions" style="margin-top:20px;"></div>
+        <button class="menu-item outline" onclick="toggleShiftModal()" style="width:100%; margin-top:10px; justify-content:center;">Отмена</button>
+    </div>
+</div>
+
+<script>
+let editMode = false;
+let isShiftOpen = {% if active_shift %}true{% else %}false{% endif %};
+let selectedNodes = new Set();
+let pcMapData = {};
+
+// ── INIT & POLLING ──
+function updateMapState() {
+    fetch('status-api/')
+    .then(r => r.json())
+    .then(data => {
+        isShiftOpen = data.shift.is_active;
+        updateHeader(data.shift);
+        data.computers.forEach(pc => {
+            pcMapData[pc.id] = pc;
+            const el = document.getElementById('pc-' + pc.id);
+            if (el) {
+                el.className = `node device-node ${pc.status} ${selectedNodes.has(pc.id.toString()) ? 'selected' : ''}`;
+            }
+        });
+    });
+}
+setInterval(updateMapState, 5000);
+updateMapState();
+
+function updateHeader(shift) {
+    const badge = document.getElementById('shiftBadge');
+    badge.className = `shift-ctrl ${shift.is_active ? 'active' : 'inactive'}`;
+    document.getElementById('shiftLabel').textContent = shift.is_active ? `СМЕНА: ${shift.admin}` : 'СМЕНА ЗАКРЫТА';
+}
+
+// ── MODES ──
+function setMode(m) {
+    editMode = (m === 'config');
+    document.getElementById('btnManage').classList.toggle('active', !editMode);
+    document.getElementById('btnConfig').classList.toggle('active', editMode);
+    document.querySelectorAll('.config-btns').forEach(b => b.style.display = editMode ? 'flex' : 'none');
+    if (!editMode) saveAllPositions();
+}
+
+// ── CONTEXT MENU ──
+function showMenu(e, id) {
+    e.preventDefault();
+    if (editMode) return;
+    
+    const menu = document.getElementById('contextMenu');
+    const pc = pcMapData[id];
+    let html = ``;
+    
+    if (!isShiftOpen) {
+        html = `<div class="menu-item danger">Смена не открыта!</div>`;
+    } else {
+        if (pc.status === 'online') {
+            html += `<div class="menu-item" onclick="openLogin('${id}')"><i class="fas fa-user-plus"></i> Зарегистрировать</div>`;
+            html += `<div class="menu-item" onclick="startGuest('${id}')"><i class="fas fa-ticket-alt"></i> Залогинить гостя</div>`;
+        } else if (pc.status === 'busy' || pc.status === 'guest') {
+            html += `<div class="menu-item" onclick="openTopUp('${id}')"><i class="fas fa-wallet"></i> Пополнить баланс</div>`;
+            html += `<div class="menu-item danger" onclick="bulkAction('shutdown', '${id}')"><i class="fas fa-power-off"></i> Завершить сессию</div>`;
+        }
+        html += `<div style="border-top:1px solid #334155; margin:4px 0;"></div>`;
+        html += `<div class="menu-item" onclick="bulkAction('reboot', '${id}')"><i class="fas fa-sync"></i> Перезагрузить</div>`;
+        html += `<div class="menu-item danger" onclick="bulkAction('shutdown', '${id}')"><i class="fas fa-power-off"></i> Выключить</div>`;
+    }
+    
+    menu.innerHTML = html;
+    menu.style.display = 'block';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+}
+
+window.onclick = () => document.getElementById('contextMenu').style.display = 'none';
+
+// ── TOOLTIP ──
+function showTooltip(e, id) {
+    if (editMode) return;
+    const pc = pcMapData[id];
+    const tt = document.getElementById('mapTooltip');
+    
+    let html = `<div class="tooltip-header">ПК #${pc.id} (${pc.hardware})</div>`;
+    if (pc.user) {
+        html += `<div class="tooltip-row"><span>Игрок:</span><span class="tooltip-val">${pc.user}</span></div>`;
+        html += `<div class="tooltip-row"><span>Баланс:</span><span class="tooltip-val">${pc.balance} мин</span></div>`;
+        html += `<div class="tooltip-row"><span>Тариф:</span><span>${pc.tariff}</span></div>`;
+    } else {
+        html += `<div style="color:var(--text-muted); font-size:12px;">Свободен</div>`;
+    }
+    
+    tt.innerHTML = html;
+    tt.style.display = 'block';
+    tt.style.left = (e.clientX + 15) + 'px';
+    tt.style.top = (e.clientY + 15) + 'px';
+}
+
+function hideTooltip() { document.getElementById('mapTooltip').style.display = 'none'; }
+
+// ── SHIFT ──
+function toggleShiftModal() {
+    const m = document.getElementById('shiftModal');
+    m.style.display = (m.style.display === 'none') ? 'flex' : 'none';
+    document.getElementById('shiftActions').innerHTML = isShiftOpen ? 
+        `<button class="btn-act danger" onclick="shiftOp('close')">ЗАКРЫТЬ СМЕНУ</button>` :
+        `<button class="btn-act primary" onclick="shiftOp('open')">ОТКРЫТЬ СМЕНУ</button>`;
+}
+
+function shiftOp(op) {
+    fetch(op === 'open' ? 'open-shift/' : 'close-shift/', { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}'} })
+    .then(() => location.reload());
+}
+
+// ── SELECTION & ACTIONS ──
+function handleNodeClick(e, id) {
+    if (editMode) return;
+    if (e.ctrlKey) {
+        if (selectedNodes.has(id)) selectedNodes.delete(id); else selectedNodes.add(id);
+    } else {
+        selectedNodes.clear();
+        selectedNodes.add(id);
+    }
+    updateMapState();
+}
+
+function clearSelection() { selectedNodes.clear(); updateMapState(); }
+
+function bulkAction(cmd, singleId = null) {
+    const ids = singleId ? [singleId] : Array.from(selectedNodes);
+    if (!ids.length) return;
+    fetch('bulk-command/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({ ids: ids, command: cmd.toUpperCase() })
+    }).then(r => r.json()).then(d => { if(!d.success) alert(d.error); });
+}
+
+function startGuest(id) {
+    fetch('open-guest/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({ computer_id: id })
+    }).then(() => updateMapState());
+}
+
+// ── CONFIG (DRAG/SAVE) ──
+let dragNode = null, dragOffset = [0,0];
+function dragStart(e, el) {
+    if (!editMode) return;
+    dragNode = el;
+    const r = el.getBoundingClientRect();
+    dragOffset = [e.clientX - r.left, e.clientY - r.top];
+}
+
+window.onmousemove = e => {
+    if (dragNode) {
+        const c = document.getElementById('canvas').getBoundingClientRect();
+        dragNode.style.left = (e.clientX - c.left - dragOffset[0]) + 'px';
+        dragNode.style.top = (e.clientY - c.top - dragOffset[1]) + 'px';
+    }
+};
+
+window.onmouseup = () => dragNode = null;
+
+function saveAllPositions() {
+    const pcPos = [], elPos = [];
+    document.querySelectorAll('.node').forEach(n => {
+        const p = { id: n.dataset.id, x: parseInt(n.style.left), y: parseInt(n.style.top) };
+        if (n.dataset.type === 'pc') pcPos.push(p); else elPos.push(p);
+    });
+    fetch('save/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+        body: JSON.stringify({ positions: pcPos, elements: elPos })
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,446 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}Пользователи — PCHub PRO{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.crm-wrap { padding: 28px; }
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+.crm-toolbar {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 24px; flex-wrap: wrap;
+}
+.crm-toolbar h1 { font-size: 22px; font-weight: 900; color: #fff; flex: 1; }
+.crm-search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--senet-bg-panel); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 0 14px; height: 42px; min-width: 260px;
+}
+.crm-search input {
+    background: none; border: none; outline: none; color: #fff;
+    font-family: 'Inter', sans-serif; font-size: 14px; width: 100%;
+}
+.crm-search i { color: var(--senet-text-muted); }
+.btn-topup-new {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--senet-accent); color: #fff;
+    padding: 0 18px; height: 42px; border-radius: 10px;
+    font-weight: 700; font-size: 14px; text-decoration: none;
+    transition: background 0.15s;
+}
+.btn-topup-new:hover { background: #7c3aed; color: #fff; }
+
+/* ── Summary strip ────────────────────────────────────────────────────────── */
+.crm-summary {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    margin-bottom: 24px;
+}
+.crm-stat {
+    background: var(--senet-bg-panel); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px; padding: 18px 20px;
+    display: flex; align-items: center; gap: 14px;
+}
+.crm-stat-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+}
+.crm-stat-val { font-size: 22px; font-weight: 900; color: #fff; }
+.crm-stat-lbl { font-size: 11px; color: var(--senet-text-muted); font-weight: 600;
+                text-transform: uppercase; letter-spacing: 0.5px; }
+
+/* ── Table ────────────────────────────────────────────────────────────────── */
+.crm-table-card {
+    background: var(--senet-bg-panel); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px; overflow: hidden;
+}
+.crm-table { width: 100%; border-collapse: collapse; }
+.crm-table th {
+    padding: 12px 16px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--senet-text-muted); text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.02);
+}
+.crm-table td {
+    padding: 14px 16px; font-size: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: middle; color: var(--senet-text);
+}
+.crm-table tr:last-child td { border-bottom: none; }
+.crm-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+.user-cell { display: flex; align-items: center; gap: 12px; }
+.user-ava {
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+    background: linear-gradient(135deg, var(--senet-accent), #6366f1);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 14px; color: #fff;
+}
+.user-name { font-weight: 700; }
+.user-sub  { font-size: 12px; color: var(--senet-text-muted); }
+
+.balance-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 100px;
+    font-weight: 800; font-size: 13px;
+}
+.balance-green { background: rgba(16,185,129,0.12); color: #10b981; }
+.balance-zero  { background: rgba(239,68,68,0.1);   color: #ef4444; }
+
+.badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 100px;
+    font-size: 11px; font-weight: 700;
+}
+.badge-active  { background: rgba(16,185,129,0.12); color: #10b981; }
+.badge-inactive{ background: rgba(100,116,139,0.2); color: #64748b;  }
+.badge-session { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+.badge-admin   { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+.action-btns { display: flex; gap: 6px; }
+.btn-sm {
+    padding: 6px 12px; border-radius: 7px; font-size: 12px; font-weight: 700;
+    cursor: pointer; border: none; font-family: 'Inter', sans-serif;
+    display: inline-flex; align-items: center; gap: 5px; transition: 0.15s;
+    text-decoration: none;
+}
+.btn-sm-primary { background: var(--senet-accent-dim); color: var(--senet-accent); }
+.btn-sm-primary:hover { background: var(--senet-accent); color: #fff; }
+.btn-sm-success { background: rgba(16,185,129,0.1); color: #10b981; }
+.btn-sm-success:hover { background: rgba(16,185,129,0.25); }
+.btn-sm-danger  { background: rgba(239,68,68,0.08); color: #ef4444; }
+.btn-sm-danger:hover  { background: rgba(239,68,68,0.2); }
+
+/* ── TopUp Modal ──────────────────────────────────────────────────────────── */
+.modal-backdrop {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
+    z-index: 9998; align-items: center; justify-content: center;
+}
+.modal-backdrop.open { display: flex; }
+.modal {
+    background: var(--senet-bg-panel); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 32px; width: 440px; max-width: 95vw;
+    z-index: 9999;
+    animation: slideUp 0.2s ease;
+}
+@keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+.modal h2 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+.modal .subtitle { color: var(--senet-text-muted); font-size: 13px; margin-bottom: 24px; }
+.modal-field { margin-bottom: 16px; }
+.modal-field label { display: block; font-size: 12px; font-weight: 700;
+                     text-transform: uppercase; letter-spacing: 0.5px;
+                     color: var(--senet-text-muted); margin-bottom: 8px; }
+.modal-field select,
+.modal-field input {
+    width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; padding: 11px 14px; border-radius: 9px;
+    font-family: 'Inter', sans-serif; font-size: 15px; outline: none;
+    transition: border-color 0.15s;
+}
+.modal-field select:focus,
+.modal-field input:focus { border-color: var(--senet-accent); }
+.modal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.btn-modal-ok {
+    width: 100%; background: var(--senet-accent); color: #fff;
+    border: none; padding: 14px; border-radius: 10px;
+    font-weight: 800; font-size: 15px; cursor: pointer;
+    font-family: 'Inter', sans-serif; margin-top: 8px; transition: 0.15s;
+}
+.btn-modal-ok:hover { background: #7c3aed; }
+.btn-modal-cancel {
+    width: 100%; background: transparent; color: var(--senet-text-muted);
+    border: 1px solid rgba(255,255,255,0.08); padding: 11px; border-radius: 10px;
+    font-weight: 600; font-size: 14px; cursor: pointer;
+    font-family: 'Inter', sans-serif; margin-top: 6px; transition: 0.15s;
+}
+.btn-modal-cancel:hover { color: #fff; border-color: rgba(255,255,255,0.2); }
+
+/* Pagination */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 20px; }
+.page-btn {
+    width: 36px; height: 36px; border-radius: 8px; border: none;
+    background: rgba(255,255,255,0.04); color: var(--senet-text-muted);
+    font-size: 14px; font-weight: 700; cursor: pointer; transition: 0.15s;
+    display: flex; align-items: center; justify-content: center;
+    text-decoration: none;
+}
+.page-btn:hover, .page-btn.cur { background: var(--senet-accent); color: #fff; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="crm-wrap">
+
+    {# ── TOOLBAR ──────────────────────────────────────────────────────────── #}
+    <div class="crm-toolbar">
+        <h1><i class="fa-solid fa-users" style="color:var(--senet-accent);margin-right:10px"></i>Пользователи</h1>
+        <div class="crm-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input id="crm-search-input" type="text" placeholder="Поиск по нику, email, телефону…"
+                   value="{{ search_query }}"
+                   onkeydown="if(event.key==='Enter'){applySearch()}"
+                   oninput="debounceSearch()">
+        </div>
+        <button class="btn-topup-new" onclick="openTopup(null,'','')">
+            <i class="fa-solid fa-plus"></i> Пополнить баланс
+        </button>
+        <a href="{% url 'admin:accounts_customuser_add' %}" class="btn-topup-new" style="background:rgba(255,255,255,0.06);color:#fff;">
+            <i class="fa-solid fa-user-plus"></i> Новый игрок
+        </a>
+    </div>
+
+    {# ── SUMMARY ──────────────────────────────────────────────────────────── #}
+    <div class="crm-summary">
+        <div class="crm-stat">
+            <div class="crm-stat-icon" style="background:rgba(139,92,246,0.15);color:var(--senet-accent)">
+                <i class="fa-solid fa-users"></i>
+            </div>
+            <div>
+                <div class="crm-stat-val">{{ total_users }}</div>
+                <div class="crm-stat-lbl">Всего игроков</div>
+            </div>
+        </div>
+        <div class="crm-stat">
+            <div class="crm-stat-icon" style="background:rgba(16,185,129,0.15);color:#10b981">
+                <i class="fa-solid fa-circle-play"></i>
+            </div>
+            <div>
+                <div class="crm-stat-val">{{ active_sessions }}</div>
+                <div class="crm-stat-lbl">Активных сессий</div>
+            </div>
+        </div>
+        <div class="crm-stat">
+            <div class="crm-stat-icon" style="background:rgba(239,68,68,0.15);color:#ef4444">
+                <i class="fa-solid fa-wallet"></i>
+            </div>
+            <div>
+                <div class="crm-stat-val">{{ zero_balance }}</div>
+                <div class="crm-stat-lbl">Нет баланса</div>
+            </div>
+        </div>
+        <div class="crm-stat">
+            <div class="crm-stat-icon" style="background:rgba(245,158,11,0.15);color:#f59e0b">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+                <div class="crm-stat-val">{{ total_minutes_h }}ч</div>
+                <div class="crm-stat-lbl">Суммарный баланс</div>
+            </div>
+        </div>
+    </div>
+
+    {# ── TABLE ────────────────────────────────────────────────────────────── #}
+    <div class="crm-table-card">
+        <table class="crm-table">
+            <thead>
+                <tr>
+                    <th>Пользователь</th>
+                    <th>Контакт</th>
+                    <th>Баланс</th>
+                    <th>Статус</th>
+                    <th>Последняя активность</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in users %}
+                <tr id="row-{{ u.id }}">
+                    <td>
+                        <div class="user-cell">
+                            <div class="user-ava">{{ u.username.0|upper }}</div>
+                            <div>
+                                <div class="user-name">{{ u.username }}</div>
+                                <div class="user-sub">
+                                    {% if u.user_type == 'admin' %}
+                                        <span class="badge badge-admin"><i class="fa-solid fa-star" style="font-size:9px"></i> Администратор</span>
+                                    {% else %}
+                                        Игрок
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="font-size:13px">{{ u.email|default:"—" }}</div>
+                        <div style="font-size:12px;color:var(--senet-text-muted)">{{ u.phone|default:"" }}</div>
+                    </td>
+                    <td>
+                        {% if u.balance %}
+                            {% if u.balance.minutes_remaining > 0 %}
+                                <span class="balance-pill balance-green">
+                                    <i class="fa-solid fa-clock" style="font-size:11px"></i>
+                                    {{ u.balance.formatted_time }}
+                                </span>
+                            {% else %}
+                                <span class="balance-pill balance-zero">
+                                    <i class="fa-solid fa-ban" style="font-size:11px"></i>
+                                    0:00
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            <span style="color:var(--senet-text-muted);font-size:13px">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.is_active_session %}
+                            <span class="badge badge-session"><i class="fa-solid fa-circle" style="font-size:8px"></i> Онлайн</span>
+                        {% elif u.is_active %}
+                            <span class="badge badge-active"><i class="fa-solid fa-circle" style="font-size:8px"></i> Активен</span>
+                        {% else %}
+                            <span class="badge badge-inactive"><i class="fa-solid fa-circle" style="font-size:8px"></i> Заблокирован</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:var(--senet-text-muted);font-size:13px">
+                        {% if u.last_activity %}
+                            {{ u.last_activity|date:"d.m.Y H:i" }}
+                        {% elif u.last_login %}
+                            {{ u.last_login|date:"d.m.Y H:i" }}
+                        {% else %}
+                            Никогда
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="btn-sm btn-sm-success" title="Пополнить баланс"
+                                    onclick="openTopup('{{ u.id }}','{{ u.username }}','{{ u.balance.minutes_remaining|default:0 }}')">
+                                <i class="fa-solid fa-coins"></i> Баланс
+                            </button>
+                            <a href="{% url 'admin:accounts_customuser_change' u.id %}"
+                               class="btn-sm btn-sm-primary" title="Редактировать">
+                                <i class="fa-solid fa-pen"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="6" style="text-align:center;padding:50px;color:var(--senet-text-muted)">
+                        <i class="fa-solid fa-users-slash" style="font-size:40px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                        Пользователи не найдены
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+
+        {# Pagination #}
+        {% if page_obj.has_other_pages %}
+        <div class="pagination">
+            {% if page_obj.has_previous %}
+                <a href="?page={{ page_obj.previous_page_number }}&q={{ search_query }}" class="page-btn">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+            {% endif %}
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <span class="page-btn cur">{{ num }}</span>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <a href="?page={{ num }}&q={{ search_query }}" class="page-btn">{{ num }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page_obj.has_next %}
+                <a href="?page={{ page_obj.next_page_number }}&q={{ search_query }}" class="page-btn">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── TOP-UP MODAL ─────────────────────────────────────────────────────────── #}
+<div class="modal-backdrop" id="topup-modal" onclick="if(event.target===this)closeTopup()">
+    <div class="modal">
+        <h2><i class="fa-solid fa-coins" style="color:var(--senet-accent);margin-right:10px"></i>Пополнение баланса</h2>
+        <div class="subtitle" id="modal-subtitle">Выберите пользователя и укажите сумму</div>
+
+        <form method="POST" action="{% url 'admin:crm_topup' %}">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+
+            <div class="modal-field">
+                <label>Пользователь</label>
+                <select name="user_id" id="modal-user-select" required>
+                    <option value="">— выберите игрока —</option>
+                    {% for u in all_users %}
+                        <option value="{{ u.id }}">{{ u.username }} {% if u.balance %}({{ u.balance.formatted_time }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="modal-row">
+                <div class="modal-field">
+                    <label>Количество минут</label>
+                    <input type="number" name="minutes" id="modal-minutes" min="1" max="99999" required placeholder="Напр: 120">
+                </div>
+                <div class="modal-field">
+                    <label>Сумма оплаты (₽)</label>
+                    <input type="number" name="amount_paid" step="0.01" required placeholder="0.00">
+                </div>
+            </div>
+
+            <div class="modal-field">
+                <label>Способ оплаты</label>
+                <select name="payment_method">
+                    <option value="cash">💵 Наличные</option>
+                    <option value="card">💳 Карта</option>
+                    <option value="transfer">📱 Перевод</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <label>Заметка (необязательно)</label>
+                <input type="text" name="note" placeholder="Например: абонемент, акция...">
+            </div>
+
+            <button type="submit" class="btn-modal-ok">
+                <i class="fa-solid fa-coins"></i> Пополнить баланс
+            </button>
+            <button type="button" class="btn-modal-cancel" onclick="closeTopup()">Отмена</button>
+        </form>
+    </div>
+</div>
+
+<script>
+let searchTimer;
+
+function openTopup(userId, username, minutes) {
+    const modal = document.getElementById('topup-modal');
+    const sel   = document.getElementById('modal-user-select');
+    const sub   = document.getElementById('modal-subtitle');
+    if (userId) {
+        sel.value = userId;
+        sub.textContent = username + ' — текущий баланс: ' + Math.floor(minutes/60) + 'ч ' + (minutes%60) + 'м';
+    } else {
+        sel.value = '';
+        sub.textContent = 'Выберите пользователя и укажите сумму';
+    }
+    modal.classList.add('open');
+    document.getElementById('modal-minutes').focus();
+}
+
+function closeTopup() {
+    document.getElementById('topup-modal').classList.remove('open');
+}
+
+function applySearch() {
+    const q = document.getElementById('crm-search-input').value;
+    window.location.href = window.location.pathname + '?q=' + encodeURIComponent(q);
+}
+
+function debounceSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applySearch, 700);
+}
+
+document.addEventListener('keydown', e => { if(e.key === 'Escape') closeTopup(); });
+</script>
+{% endblock %}
