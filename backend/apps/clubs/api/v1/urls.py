@@ -36,8 +36,9 @@ urlpatterns = [
     # Client groups + comments
     path("client-groups/", ClientGroupListCreateAPIView.as_view(), name="client-group-list"),
     path("client-groups/<int:pk>/", ClientGroupDetailAPIView.as_view(), name="client-group-detail"),
-    path("clients/<int:user_id>/group/", ClientAssignGroupAPIView.as_view(), name="client-assign-group"),
-    path("clients/<int:user_id>/comments/", ClientCommentListCreateAPIView.as_view(), name="client-comments"),
+    # CustomUser PK is a UUID — `<int:user_id>` never matched (404 in prod).
+    path("clients/<uuid:user_id>/group/", ClientAssignGroupAPIView.as_view(), name="client-assign-group"),
+    path("clients/<uuid:user_id>/comments/", ClientCommentListCreateAPIView.as_view(), name="client-comments"),
     path("client-comments/<int:pk>/", ClientCommentDetailAPIView.as_view(), name="client-comment-detail"),
     path("<int:pk>/", ClubRetrieveUpdateAPIView.as_view(), name="club-detail"),
     path("<int:pk>/regenerate-token/", ClubTokenRegenerateAPIView.as_view(), name="club-regenerate-token"),

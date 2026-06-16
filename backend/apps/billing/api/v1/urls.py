@@ -44,7 +44,9 @@ urlpatterns = [
         "admin/users/", UserListWithBalanceAPIView.as_view(), name="users-balance-list"
     ),
     path("admin/topup/", TopUpAPIView.as_view(), name="topup"),
-    path("admin/users/<int:user_id>/profile/", UserClubProfilePatchAPIView.as_view(), name="user-profile-patch"),
+    # CustomUser PK is a UUID — `<int:user_id>` never matched, so this endpoint (block
+    # client / set discount / comment on the Clients page) returned 404 in production.
+    path("admin/users/<uuid:user_id>/profile/", UserClubProfilePatchAPIView.as_view(), name="user-profile-patch"),
     path("admin/payments/", PaymentListAPIView.as_view(), name="payment-list"),
     path("admin/payments/<int:pk>/refund/", PaymentRefundAPIView.as_view(), name="payment-refund"),
     path("admin/postpaid/start/", StartPostpaidAPIView.as_view(), name="postpaid-start"),

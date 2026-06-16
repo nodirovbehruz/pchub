@@ -27,7 +27,8 @@ urlpatterns = [
     path("plans/", PlatformPlansAPIView.as_view(), name="plans"),
     path("plans/<int:pk>/", PlatformPlanDetailAPIView.as_view(), name="plan-detail"),
     path("users/", PlatformUsersAPIView.as_view(), name="users"),
-    path("users/<int:pk>/action/", PlatformUserActionAPIView.as_view(), name="user-action"),
+    # CustomUser PK is a UUID — `<int:pk>` never matched (404 in prod).
+    path("users/<uuid:pk>/action/", PlatformUserActionAPIView.as_view(), name="user-action"),
     path("employees/", PlatformEmployeesAPIView.as_view(), name="employees"),
     path("billing/", PlatformBillingAPIView.as_view(), name="billing"),
 ]
