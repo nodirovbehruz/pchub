@@ -133,6 +133,15 @@ class ClubRetrieveUpdateAPIView(APIView):
         club, err = self._get_club(pk, request.user)
         if err:
             return err
+        # SECURITY: don't hand a club's full record (incl. the club_token shell-linking
+        # secret and owner contacts) to non-members. Was readable by any authenticated
+        # user via id enumeration. Require owner / active member / platform admin.
+        u = request.user
+        is_admin = getattr(u, "user_type", "") == "admin" or getattr(u, "is_superuser", False)
+        if not is_admin and club.owner_id != u.pk:
+            from apps.clubs.models import ClubMembership
+            if not ClubMembership.objects.filter(user=u, club_id=pk, is_active=True).exists():
+                return Response({"error": "Нет доступа к клубу"}, status=status.HTTP_403_FORBIDDEN)
         return Response(ClubSerializer(club).data)
 
     def patch(self, request, pk):

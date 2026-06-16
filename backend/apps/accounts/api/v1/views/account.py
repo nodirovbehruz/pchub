@@ -167,6 +167,20 @@ def _can_manage_staff(request):
         return False
 
 
+def _is_request_owner_of(requester, club_id, target):
+    """Owner-protection: acting on the club OWNER is allowed only when the requester IS
+    that club's owner. If the target isn't the owner, no extra restriction applies."""
+    if not club_id:
+        return True
+    try:
+        from apps.clubs.models import Club
+        if not Club.objects.filter(id=club_id, owner=target).exists():
+            return True
+        return Club.objects.filter(id=club_id, owner=requester).exists()
+    except Exception:
+        return False
+
+
 def _staff_target_in_club(emp, club_id):
     """SECURITY: the target employee must belong to the manager's OWN club. Staff
     endpoints fetched the target by global id with no scope, so a manager of club A
@@ -313,6 +327,10 @@ class EmployeeManageAPIView(APIView):
         scope_club = getattr(request, 'current_club_id', None) or request.data.get('club') or request.query_params.get('club')
         if not is_platform_admin and not _staff_target_in_club(emp, scope_club):
             return Response({'error': 'Нет прав на этого сотрудника'}, status=status.HTTP_403_FORBIDDEN)
+        # A mere manager must NOT be able to demote/strip the club OWNER. Only the owner
+        # themselves or a platform admin may modify the owner.
+        if not is_platform_admin and not _is_request_owner_of(request.user, scope_club, emp):
+            return Response({'error': 'Только владелец клуба может изменять владельца'}, status=status.HTTP_403_FORBIDDEN)
 
         role = request.data.get('role', emp.user_type)
         if request.data.get('first_name') is not None:
@@ -375,6 +393,9 @@ class EmployeeManageAPIView(APIView):
         # — letting a manager of one club demote/lock out another club's owner.
         if not is_platform_admin and not _staff_target_in_club(emp, club_id):
             return Response({'error': 'Нет прав на этого сотрудника'}, status=status.HTTP_403_FORBIDDEN)
+        # A manager must not remove/demote the club OWNER — only the owner or admin.
+        if not is_platform_admin and not _is_request_owner_of(request.user, club_id, emp):
+            return Response({'error': 'Только владелец клуба может удалить владельца'}, status=status.HTTP_403_FORBIDDEN)
 
         if club_id:
             # Remove from this club only

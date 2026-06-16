@@ -9,7 +9,9 @@ class TaskSerializer(drf_serializers.ModelSerializer):
     class Meta:
         model = Task
         fields = "__all__"
-        read_only_fields = ["id", "created_at", "updated_at", "finished_at", "finished_by"]
+        # `club` is read-only: it's forced by TenantCreateMixin on create, and leaving it
+        # writable let an operator PATCH {club: <other>} to move the task into a foreign club.
+        read_only_fields = ["id", "created_at", "updated_at", "finished_at", "finished_by", "club"]
 
 
 class NewsSerializer(drf_serializers.ModelSerializer):
@@ -18,7 +20,8 @@ class NewsSerializer(drf_serializers.ModelSerializer):
     class Meta:
         model = News
         fields = "__all__"
-        read_only_fields = ["id", "created_at", "updated_at", "cover_image_url"]
+        # `club` read-only — forced on create, must not be reassignable via PATCH.
+        read_only_fields = ["id", "created_at", "updated_at", "cover_image_url", "club"]
 
     def get_cover_image_url(self, obj):
         if obj.cover_image:

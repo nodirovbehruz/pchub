@@ -26,7 +26,10 @@ class ClientSessionSerializer(serializers.ModelSerializer):
             "started_at", "finished_at", "cancelled_at",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        # club/client/money fields must not be client-writable: leaving them open let a
+        # PATCH zero out total_cost, flip postpaid, or move the session to another tenant.
+        read_only_fields = ["id", "created_at", "updated_at", "club", "client",
+                            "total_cost", "payment", "guest_session"]
 
 
 class ReviewSerializer(serializers.ModelSerializer):

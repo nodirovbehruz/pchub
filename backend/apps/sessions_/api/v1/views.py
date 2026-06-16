@@ -50,6 +50,14 @@ class ClientSessionDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateAPIVi
     permission_classes = [permissions.IsAuthenticated]
     queryset = ClientSession.objects.all()
 
+    def update(self, request, *args, **kwargs):
+        # Editing a session (status/duration/etc.) is a STAFF action — was open to any
+        # authenticated member regardless of role.
+        obj = self.get_object()
+        if not _is_club_staff(request.user, obj.club_id):
+            return Response({"detail": "Только для персонала клуба"}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
 
 class ReviewListAPIView(TenantFilterMixin, generics.ListCreateAPIView):
     serializer_class = ReviewSerializer
