@@ -140,10 +140,17 @@ def grant(club, plan, days=PERIOD_DAYS, by_user=None):
     from apps.clubs.models import ClubSubscription, SubscriptionStatus
     sub, _ = ClubSubscription.objects.get_or_create(club=club, defaults={"plan": plan})
     now = timezone.now()
+    # Was int(days or PERIOD_DAYS): a non-numeric `days` raised ValueError → 500, and a
+    # negative value set expires_at in the PAST (instantly-dead grant). Coerce + clamp.
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        days = PERIOD_DAYS
+    days = max(1, min(3650, days))
     base = sub.expires_at if (sub.expires_at and sub.expires_at > now) else now
     sub.plan = plan
     sub.status = SubscriptionStatus.ACTIVE
-    sub.expires_at = base + timedelta(days=int(days or PERIOD_DAYS))
+    sub.expires_at = base + timedelta(days=days)
     sub.save(update_fields=["plan", "status", "expires_at", "updated_at"])
     return sub
 

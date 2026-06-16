@@ -29,6 +29,16 @@ class NewsSerializer(drf_serializers.ModelSerializer):
             return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
         return f"https://picsum.photos/seed/news-{obj.id}/624/352"
 
+    def validate(self, attrs):
+        # A reversed window (show_until < show_from) silently makes the news permanently
+        # invisible (the published filter needs show_from<=now<=show_until) — reject it.
+        sf = attrs.get("show_from", getattr(self.instance, "show_from", None))
+        su = attrs.get("show_until", getattr(self.instance, "show_until", None))
+        if sf and su and su < sf:
+            raise drf_serializers.ValidationError(
+                {"show_until": "Дата окончания показа раньше даты начала"})
+        return attrs
+
 
 class TaskListCreateAPIView(TenantCreateMixin, TenantFilterMixin, generics.ListCreateAPIView):
     serializer_class = TaskSerializer

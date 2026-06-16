@@ -204,6 +204,18 @@ class GameUpdateSerializer(serializers.ModelSerializer):
     app_id = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     slug = serializers.SlugField(required=False)
 
+    def validate_app_id(self, value):
+        # app_id must stay unique — Create enforced this but Update did not, so two
+        # games could share an app_id and GameSession resolution (.get(app_id=...))
+        # then raised MultipleObjectsReturned → HTTP 500 on every shell session ping.
+        if value:
+            qs = Game.objects.filter(app_id=value)
+            if self.instance is not None:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError("A game with this App ID already exists.")
+        return value
+
     class Meta:
         model = Game
         fields = [

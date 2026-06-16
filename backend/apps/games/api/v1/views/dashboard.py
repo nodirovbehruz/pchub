@@ -97,10 +97,17 @@ class ComputerGamesListAPIView(APIView):
     def get(self, request):
         computer_id = request.query_params.get("computer_id")
         hardware_id = request.query_params.get("hardware_id")
+        if computer_id:
+            try:
+                computer_id = int(computer_id)
+            except (TypeError, ValueError):
+                # Was int(computer_id) unguarded → a non-numeric value (e.g. ?computer_id=abc
+                # from the shell/typo) raised ValueError → HTTP 500. Return a clean 400.
+                return Response({"error": "computer_id должен быть числом"}, status=400)
 
         # Get data from service
         data = self.service.get_computer_games(
-            computer_id=int(computer_id) if computer_id else None,
+            computer_id=computer_id or None,
             hardware_id=hardware_id,
             user=request.user,
         )

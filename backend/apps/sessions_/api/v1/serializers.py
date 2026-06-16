@@ -36,6 +36,9 @@ class ReviewSerializer(serializers.ModelSerializer):
     client_username = serializers.CharField(source="client.username", read_only=True)
     computer_name = serializers.CharField(source="computer.name", read_only=True)
 
+    def validate_rating(self, value):
+        return _validate_rating_1_5(value)
+
     class Meta:
         model = Review
         fields = [
@@ -59,6 +62,14 @@ class ReviewSerializer(serializers.ModelSerializer):
             "session": {"required": False},
             "shift": {"required": False},
         }
+
+
+def _validate_rating_1_5(value):
+    # Review.rating had no bound (PositiveSmallIntegerField up to ~32767), so a client
+    # could POST rating=0 or 9999 and corrupt rating averages shown to staff.
+    if value is not None and not (1 <= int(value) <= 5):
+        raise serializers.ValidationError("Рейтинг должен быть от 1 до 5")
+    return value
 
 
 class AdminCallSerializer(serializers.ModelSerializer):
