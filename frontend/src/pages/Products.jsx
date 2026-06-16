@@ -336,15 +336,15 @@ const CategoryModal = ({ category, onClose, onSaved }) => {
     if (!name.trim()) { toast('Введите название', { type: 'warning' }); return; }
     setSaving(true);
     try {
-      const slug = name.toLowerCase().replace(/[^a-zа-яё0-9]+/gi, '-').slice(0, 50);
       if (isEdit) {
         await apiFetch(`/api/v1/shops/categories/${category.slug}/update/`, {
           method: 'PATCH', body: JSON.stringify({ name }),
         });
         toast('Группа обновлена', { type: 'success' });
       } else {
+        // slug is generated server-side (Cyrillic names can't form a valid SlugField)
         await apiFetch('/api/v1/shops/categories/create/', {
-          method: 'POST', body: JSON.stringify({ name, slug }),
+          method: 'POST', body: JSON.stringify({ name }),
         });
         toast('Группа добавлена', { type: 'success' });
       }
