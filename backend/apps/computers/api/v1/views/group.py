@@ -1,7 +1,7 @@
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions
 
-from apps.clubs.api.v1.mixins import TenantFilterMixin, TenantCreateMixin
+from apps.clubs.api.v1.mixins import TenantFilterMixin, TenantCreateMixin, validated_club_id
 from apps.computers.api.v1.serializers.group import ComputerGroupSerializer
 from apps.computers.models import ComputerGroup
 
@@ -15,11 +15,14 @@ class ComputerGroupListCreateAPIView(TenantCreateMixin, generics.ListCreateAPIVi
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        qs = ComputerGroup.objects.filter(is_active=True).select_related("club")
-        club_id = self.request.query_params.get("club")
-        if club_id:
-            qs = qs.filter(club_id=club_id)
-        return qs.order_by("club_id", "position", "name")
+        # SECURITY: was trusting raw ?club= with no membership check, so any authenticated
+        # user could read another club's zones by passing its id. Scope to a club the
+        # caller actually belongs to (validated_club_id checks membership).
+        cid = validated_club_id(self.request)
+        if not cid:
+            return ComputerGroup.objects.none()
+        return (ComputerGroup.objects.filter(is_active=True, club_id=cid)
+                .select_related("club").order_by("position", "name"))
 
 
 @extend_schema(tags=["Computer Groups"])

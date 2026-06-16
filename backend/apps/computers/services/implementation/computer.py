@@ -63,12 +63,19 @@ class ComputerService(IComputerService):
             update_data["status"] = ComputerStatus.ONLINE
             update_data["last_seen"] = timezone.now()
 
-            # BUGFIX: re-registration ignored club_token, so a re-imaged PC stayed in
-            # its old club. If a valid club_token resolved to a DIFFERENT club, move it.
             new_club = data.get("club_id") or data.get("club")
             if hasattr(new_club, "id"):
                 new_club = new_club.id
-            if new_club and new_club != existing_computer.club_id:
+            # SECURITY: do NOT let a re-register silently move a PC into a different club.
+            # hardware_id is spoofable, so anyone holding a victim's hardware_id + their
+            # OWN valid club_token could re-point the victim's PC (and overwrite its
+            # name/IP/MAC) into their club. Only accept the club when the PC has none yet
+            # (adopt an orphan); a real cross-club move must be done from the admin panel.
+            if existing_computer.club_id and new_club and new_club != existing_computer.club_id:
+                raise ValidationError({
+                    "club": "Этот ПК уже привязан к другому клубу. Перенос выполняется из админки."
+                })
+            if new_club and not existing_computer.club_id:
                 update_data["club_id"] = new_club
 
             return self.repository.update(existing_computer, **update_data)

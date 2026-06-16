@@ -90,6 +90,15 @@ class ComputerMetricsHistoryAPIView(APIView):
     def get(self, request, computer_id):
         hours = int(request.query_params.get("hours", 24))
 
+        # SECURITY (IDOR): was keyed only by computer_id with no club check — any
+        # authenticated user could read any club's PC metrics by iterating ids. Scope
+        # to a club the caller belongs to.
+        from apps.clubs.api.v1.mixins import validated_club_id
+        from apps.computers.models import Computer
+        cid = validated_club_id(request)
+        if not cid or not Computer.objects.filter(id=computer_id, club_id=cid).exists():
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
         # Get metrics history
         data = self.service.get_computer_metrics_history(
             computer_id=computer_id, hours=hours

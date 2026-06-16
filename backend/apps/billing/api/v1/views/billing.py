@@ -553,6 +553,14 @@ class PaymentRefundAPIView(APIView):
         details = {}  # returned to caller
 
         with transaction.atomic():
+            # Idempotency: the [REFUNDED] check above is unlocked, so two concurrent
+            # refund requests for the same payment could BOTH pass it and reverse
+            # stock/deposit + cut a cash-out (РКО) twice. Re-fetch under a row lock and
+            # re-check the stamp before doing any reversal.
+            payment = Payment.objects.select_for_update().select_related("user").get(pk=pk)
+            if payment.note and "[REFUNDED]" in payment.note:
+                return Response({"error": "Платёж уже возвращён"}, status=status.HTTP_400_BAD_REQUEST)
+
             if is_pos:
                 # ── POS sale refund ──────────────────────────────────────────
                 # 1. Find the OperationLog entry that recorded this sale

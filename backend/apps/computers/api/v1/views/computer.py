@@ -42,6 +42,11 @@ class ComputerRegistrationAPIView(generics.CreateAPIView):
 
     serializer_class = ComputerRegistrationSerializer
     permission_classes = [permissions.AllowAny]
+    # The shell registers at boot while still holding a STALE Bearer from a prior
+    # session. The global default is JWTAuthentication, which raises 401 on the expired
+    # token BEFORE AllowAny takes effect — blocking registration. Clear auth here (same
+    # gotcha already fixed for heartbeat / guest-status).
+    authentication_classes = []
     service = ComputerService(repository=ComputerRepository())
 
     def create(self, request, *args, **kwargs):

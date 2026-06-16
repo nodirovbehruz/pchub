@@ -63,7 +63,10 @@ class POSSellAPIView(APIView):
                 return Response({'ok': False, 'message': 'Количество должно быть ≥ 1'}, status=400)
             try:
                 if it['kind'] == 'products':
-                    obj = Product.objects.get(id=it['id'])
+                    # SECURITY: scope to the authorized club — was Product.objects.get(id=...)
+                    # with no club filter, so an operator could sell another club's product,
+                    # draining THAT club's stock while booking the revenue to their own.
+                    obj = Product.objects.get(id=it['id'], club_id=club_id)
                     price = obj.price
                     try:
                         stock_obj = Stock.objects.filter(product=obj).first()
@@ -72,10 +75,10 @@ class POSSellAPIView(APIView):
                     except Exception:
                         pass
                 elif it['kind'] == 'services':
-                    obj = Service.objects.get(id=it['id'])
+                    obj = Service.objects.get(id=it['id'], club_id=club_id)
                     price = obj.price
                 elif it['kind'] == 'combos':
-                    obj = Combo.objects.get(id=it['id'])
+                    obj = Combo.objects.get(id=it['id'], club_id=club_id)
                     price = obj.sale_price
                     # BUGFIX: a combo draws down its component products, but stock was
                     # never checked or decremented for combos (only kind=='products').

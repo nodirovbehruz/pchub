@@ -126,9 +126,17 @@ class UserClubProfile(models.Model):
         return (self.postpaid_rate * hours).quantize(Decimal("0.01"))
 
     def add_minutes(self, minutes: int) -> None:
-        self.minutes_remaining += minutes
-        self.is_active = True
-        self.save(update_fields=["minutes_remaining", "is_active", "updated_at"])
+        # Atomic DB-side increment (was a plain read-modify-write). deduct_minute() is
+        # row-locked, but this credit path wasn't — so minutes bought/topped-up while the
+        # shell pinged the per-minute deduction could clobber each other (lost minutes).
+        # F() makes the +/- collision-free at the DB without needing select_for_update.
+        from django.db import transaction
+        from django.db.models import F
+        cls = type(self)
+        with transaction.atomic():
+            cls.objects.filter(pk=self.pk).update(
+                minutes_remaining=F("minutes_remaining") + minutes, is_active=True)
+        self.refresh_from_db(fields=["minutes_remaining", "is_active"])
 
     def deduct_minute(self) -> bool:
         """Deduct one minute at this club. Postpaid → accrues debt instead.

@@ -51,33 +51,41 @@ class BillingService:
         deposit_after = Decimal("0")
         if profile and amount_paid > 0 and not is_penalty:
             try:
-                profile.deposit_money += amount_paid
-                # BUGFIX: cashback was only computed in the orphaned /loyalty/topup/
-                # endpoint that no UI ever calls, so configured CashbackRules never
-                # credited anyone. Compute it here, in the single top-up path every
-                # UI actually uses, gated by the club's «Бонусная система» setting.
-                upd = ["deposit_money"]
-                try:
-                    from apps.clubs.models import ClubSettings
-                    if club_id and ClubSettings.get_bool(club_id, "bonus_system", True):
-                        from apps.loyalty.models import CashbackRule
-                        from django.db.models import Q as _Q
-                        from django.utils import timezone as _tz
-                        _now = _tz.now()
-                        rule = (CashbackRule.objects
-                                .filter(club_id=club_id, is_active=True,
-                                        deposit_threshold__lte=amount_paid)
-                                .filter(_Q(valid_until__isnull=True) | _Q(valid_until__gte=_now))
-                                .order_by("-deposit_threshold").first())
-                        if rule:
-                            cb = rule.compute_reward(amount_paid)
-                            if cb:
-                                profile.bonus_balance = (profile.bonus_balance or Decimal("0")) + cb
-                                upd.append("bonus_balance")
-                except Exception:
-                    pass
-                profile.save(update_fields=upd)
-                deposit_after = profile.deposit_money
+                from django.db import transaction as _txn
+                from apps.clubs.models import UserClubProfile as _UCP
+                # Lock the profile row so two concurrent top-ups (operator + shell, or a
+                # double-click) can't both read the same deposit and overwrite each other.
+                # The deduction side is row-locked; this credit side was a plain
+                # read-modify-write → a top-up could silently vanish under concurrency.
+                with _txn.atomic():
+                    profile = _UCP.objects.select_for_update().get(pk=profile.pk)
+                    profile.deposit_money += amount_paid
+                    # BUGFIX: cashback was only computed in the orphaned /loyalty/topup/
+                    # endpoint that no UI ever calls, so configured CashbackRules never
+                    # credited anyone. Compute it here, in the single top-up path every
+                    # UI actually uses, gated by the club's «Бонусная система» setting.
+                    upd = ["deposit_money"]
+                    try:
+                        from apps.clubs.models import ClubSettings
+                        if club_id and ClubSettings.get_bool(club_id, "bonus_system", True):
+                            from apps.loyalty.models import CashbackRule
+                            from django.db.models import Q as _Q
+                            from django.utils import timezone as _tz
+                            _now = _tz.now()
+                            rule = (CashbackRule.objects
+                                    .filter(club_id=club_id, is_active=True,
+                                            deposit_threshold__lte=amount_paid)
+                                    .filter(_Q(valid_until__isnull=True) | _Q(valid_until__gte=_now))
+                                    .order_by("-deposit_threshold").first())
+                            if rule:
+                                cb = rule.compute_reward(amount_paid)
+                                if cb:
+                                    profile.bonus_balance = (profile.bonus_balance or Decimal("0")) + cb
+                                    upd.append("bonus_balance")
+                    except Exception:
+                        pass
+                    profile.save(update_fields=upd)
+                    deposit_after = profile.deposit_money
             except Exception:
                 pass
 
