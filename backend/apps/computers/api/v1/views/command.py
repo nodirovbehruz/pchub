@@ -35,10 +35,27 @@ class AdminCommandListCreateAPIView(APIView):
         ).exists()
 
     def get(self, request):
+        # SECURITY: was returning ComputerCommand.objects (ALL clubs) with no scope, so
+        # any authenticated user (incl. a plain client with a shell-issued JWT) could
+        # read every club's commands — including high_access command payloads that carry
+        # the club's plaintext high-access password. Scope to clubs the caller manages.
+        is_admin = getattr(request.user, "is_admin", False) or getattr(request.user, "user_type", "") == "admin"
         computer_id = request.query_params.get("computer_id")
         qs = ComputerCommand.objects.select_related("computer", "game", "created_by")
         if computer_id:
+            comp = Computer.objects.filter(pk=computer_id).first()
+            if not comp or not self._can_manage(request.user, getattr(comp, "club_id", None)):
+                return Response({"detail": "Нет прав"}, status=status.HTTP_403_FORBIDDEN)
             qs = qs.filter(computer_id=computer_id)
+        elif not is_admin:
+            from apps.clubs.models import Club, ClubMembership
+            club_ids = set(Club.objects.filter(owner=request.user).values_list("id", flat=True)) | set(
+                ClubMembership.objects.filter(
+                    user=request.user, is_active=True, role__in=["owner", "manager"]
+                ).values_list("club_id", flat=True))
+            if not club_ids:
+                return Response([])
+            qs = qs.filter(computer__club_id__in=club_ids)
         serializer = ComputerCommandSerializer(qs, many=True)
         return Response(serializer.data)
 

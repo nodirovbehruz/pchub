@@ -4,7 +4,6 @@ from django.core.files.storage import default_storage
 from django.http import JsonResponse
 from django.urls import include, path
 from django.views.decorators.csrf import csrf_exempt
-from graphene_django.views import GraphQLView
 
 admin.site.site_header = "🎮 PCHub Gaming Control Center"
 admin.site.site_title = "PChub Admin"
@@ -41,7 +40,10 @@ urlpatterns = [
     path("i18n/", include("django.conf.urls.i18n")),
     path("admin/", admin.site.urls),
     path("health/", health_check, name="health"),
-    path("graphql/", csrf_exempt(GraphQLView.as_view(graphiql=True))),
+    # SECURITY: the GraphQL endpoint was wired with NO authentication/authorization —
+    # mutations let anyone promote themselves to platform admin and bypass all tenant
+    # checks; queries leaked every club's staff/clients. It is unused by the frontend
+    # and the C# shell (both use the REST API), so the route is removed entirely.
     *api_v1_urlpatterns,
 ]
 

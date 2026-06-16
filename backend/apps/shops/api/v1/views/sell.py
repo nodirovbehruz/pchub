@@ -201,14 +201,15 @@ class POSSellAPIView(APIView):
                                 profile.bonus_balance = bal - bonus_used
                                 pay_total = total - bonus_used
                     if profile.deposit_money < pay_total:
-                        return Response({
-                            'ok': False,
-                            'message': f'Недостаточно средств: депозит {profile.deposit_money} + бонусы {bonus_used} < {total} сум'
-                        }, status=400)
+                        # BUGFIX: was `return Response(...)` INSIDE transaction.atomic() —
+                        # a plain return exits the block normally, so Django COMMITTED the
+                        # stock decrement + combo minutes already applied above, gifting
+                        # goods/time for free on a rejected sale. Raise instead → rollback.
+                        raise _VErr({'message': f'Недостаточно средств: депозит {profile.deposit_money} + бонусы {bonus_used} < {total} сум'})
                     profile.deposit_money -= pay_total
                     profile.save(update_fields=['deposit_money', 'bonus_balance'])
                 except UserClubProfile.DoesNotExist:
-                    return Response({'ok': False, 'message': 'У клиента нет профиля в клубе'}, status=400)
+                    raise _VErr({'message': 'У клиента нет профиля в клубе'})
 
             # Discount + bonus note suffix
             disc_note = f'[СКИДКА {discount_pct}%]' if discount_amt > 0 else ''

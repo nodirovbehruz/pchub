@@ -5,7 +5,13 @@ from rest_framework.views import APIView
 
 
 def _club_id(request):
-    return getattr(request, "current_club_id", None) or request.query_params.get("club") or request.data.get("club")
+    """SECURITY: resolve the club ONLY after re-checking that request.user is the
+    owner / active member / platform admin of it. Was trusting the raw
+    current_club_id / ?club= / body `club` with no membership check, so any
+    authenticated user could read, edit or delete another club's client groups and
+    operator comments by passing a foreign club id."""
+    from apps.clubs.api.v1.mixins import validated_club_id
+    return validated_club_id(request)
 
 
 # ── Client Groups ──────────────────────────────────────────────────────────
@@ -33,7 +39,7 @@ class ClientGroupListCreateAPIView(APIView):
         club_id = _club_id(request)
         name = (request.data.get("name") or "").strip()
         if not club_id:
-            return Response({"error": "club required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         if not name:
             return Response({"error": "Название обязательно"}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -53,8 +59,13 @@ class ClientGroupDetailAPIView(APIView):
 
     def patch(self, request, pk):
         from apps.clubs.models import ClientGroup, UserClubProfile
+        club_id = _club_id(request)
+        if not club_id:
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         try:
-            g = ClientGroup.objects.get(pk=pk)
+            # SECURITY: constrain to the authorized club (was ClientGroup.objects.get(pk)
+            # — cross-club IDOR: any user could rename/re-discount another club's group).
+            g = ClientGroup.objects.get(pk=pk, club_id=club_id)
         except ClientGroup.DoesNotExist:
             return Response({"error": "Группа не найдена"}, status=status.HTTP_404_NOT_FOUND)
         if "name" in request.data:
@@ -68,12 +79,15 @@ class ClientGroupDetailAPIView(APIView):
                 pass
         g.save(update_fields=["name", "percent_discount"])
         return Response({"id": g.id, "name": g.name, "percent_discount": g.percent_discount,
-                         "members_count": UserClubProfile.objects.filter(group=g).count()})
+                         "members_count": UserClubProfile.objects.filter(club_id=club_id, group=g).count()})
 
     def delete(self, request, pk):
         from apps.clubs.models import ClientGroup
+        club_id = _club_id(request)
+        if not club_id:
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         try:
-            g = ClientGroup.objects.get(pk=pk)
+            g = ClientGroup.objects.get(pk=pk, club_id=club_id)
         except ClientGroup.DoesNotExist:
             return Response({"error": "Группа не найдена"}, status=status.HTTP_404_NOT_FOUND)
         g.delete()  # members.group set to NULL via on_delete=SET_NULL
@@ -85,15 +99,20 @@ class ClientAssignGroupAPIView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def patch(self, request, user_id):
-        from apps.clubs.models import UserClubProfile
+        from apps.clubs.models import ClientGroup, UserClubProfile
         club_id = _club_id(request)
         if not club_id:
-            return Response({"error": "club required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         try:
             profile = UserClubProfile.objects.get(user_id=user_id, club_id=club_id)
         except UserClubProfile.DoesNotExist:
             return Response({"error": "Профиль не найден"}, status=status.HTTP_404_NOT_FOUND)
         group_id = request.data.get("group")
+        if group_id:
+            # SECURITY: the group must belong to THIS club — was assigned blindly, so a
+            # foreign group's discount leaked in (and a bad id raised a 500 IntegrityError).
+            if not ClientGroup.objects.filter(id=group_id, club_id=club_id).exists():
+                return Response({"error": "Группа не найдена в этом клубе"}, status=status.HTTP_400_BAD_REQUEST)
         profile.group_id = group_id or None
         profile.save(update_fields=["group"])
         return Response({"success": True, "group": profile.group_id})
@@ -106,10 +125,12 @@ class ClientCommentListCreateAPIView(APIView):
     def get(self, request, user_id):
         from apps.clubs.models import ClientComment
         club_id = _club_id(request)
-        qs = ClientComment.objects.filter(client_id=user_id)
-        if club_id:
-            qs = qs.filter(club_id=club_id)
-        qs = qs.select_related("author")
+        # SECURITY: require an authorized club — was returning this client's operator
+        # notes from EVERY club when no club context was given (cross-club PII leak).
+        if not club_id:
+            return Response([])
+        qs = (ClientComment.objects.filter(client_id=user_id, club_id=club_id)
+              .select_related("author"))
         return Response([{
             "id": c.id,
             "text": c.text,
@@ -123,7 +144,7 @@ class ClientCommentListCreateAPIView(APIView):
         club_id = _club_id(request)
         text = (request.data.get("text") or "").strip()
         if not club_id:
-            return Response({"error": "club required"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         if not text:
             return Response({"error": "Комментарий пуст"}, status=status.HTTP_400_BAD_REQUEST)
         c = ClientComment.objects.create(
@@ -143,8 +164,13 @@ class ClientCommentDetailAPIView(APIView):
 
     def patch(self, request, pk):
         from apps.clubs.models import ClientComment
+        club_id = _club_id(request)
+        if not club_id:
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
         try:
-            c = ClientComment.objects.get(pk=pk)
+            # SECURITY: scope to the authorized club (was ClientComment.objects.get(pk)
+            # — cross-club IDOR on operator notes).
+            c = ClientComment.objects.get(pk=pk, club_id=club_id)
         except ClientComment.DoesNotExist:
             return Response({"error": "Не найдено"}, status=status.HTTP_404_NOT_FOUND)
         if "is_important" in request.data:
@@ -158,5 +184,10 @@ class ClientCommentDetailAPIView(APIView):
 
     def delete(self, request, pk):
         from apps.clubs.models import ClientComment
-        ClientComment.objects.filter(pk=pk).delete()
+        club_id = _club_id(request)
+        if not club_id:
+            return Response({"error": "club required or no access"}, status=status.HTTP_403_FORBIDDEN)
+        deleted, _ = ClientComment.objects.filter(pk=pk, club_id=club_id).delete()
+        if not deleted:
+            return Response({"error": "Не найдено"}, status=status.HTTP_404_NOT_FOUND)
         return Response({"success": True})
