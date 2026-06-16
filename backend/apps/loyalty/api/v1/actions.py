@@ -103,6 +103,27 @@ class ApplyPromocodeAPIView(APIView):
         if p.channels and channel not in p.channels:
             return Response({'ok': False, 'message': f'Канал «{channel}» недоступен'}, status=400)
 
+        # SECURITY: enforce targeting — a code limited to specific clients or a client
+        # group was redeemable by ANYONE (targeting fields stored but never checked).
+        if p.specific_clients.exists():
+            if not p.specific_clients.filter(id=client_id).exists():
+                return Response({'ok': False, 'message': 'Промокод не предназначен этому клиенту'}, status=403)
+        elif p.client_group_id:
+            from apps.clubs.models import UserClubProfile
+            prof = UserClubProfile.objects.filter(user_id=client_id, club_id=cid).first()
+            if not prof or getattr(prof, 'group_id', None) != p.client_group_id:
+                return Response({'ok': False, 'message': 'Промокод только для определённой группы клиентов'}, status=403)
+
+        # DISCOUNT codes are applied at the POS checkout, not here. Do NOT claim the
+        # one-time usage in this endpoint — it used to record a usage and credit nothing,
+        # so the client permanently lost the code and got no discount. Return the percent
+        # for the cashier; usage is consumed when the discounted sale is recorded.
+        if p.reward_type == PromocodeRewardType.DISCOUNT:
+            return Response({
+                'ok': True, 'reward_type': p.reward_type, 'value': str(p.value),
+                'message': f'Скидка {p.value}% — применяется на кассе',
+            })
+
         # Atomically claim a use: lock the promo row, re-check the limit under the
         # lock, and let the DB unique_together(promocode,client) enforce once-per-client.
         # Was a check-then-act race that could blow past usage_limit / double-apply.

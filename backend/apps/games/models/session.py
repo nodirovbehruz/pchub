@@ -97,22 +97,47 @@ class GameSession(models.Model):
         """Start a new gaming session"""
         from django.utils import timezone
 
-        self.current_session_start = timezone.now()
+        now = timezone.now()
+        # Don't reset an already-running session's start — re-starting used to overwrite
+        # current_session_start and silently discard the already-elapsed time.
+        if self.session_status == SessionStatus.ACTIVE and self.current_session_start:
+            return
+        # One seat = one active session: close any OTHER still-ACTIVE session on this
+        # computer (crediting its elapsed time) before opening a new one. Previously
+        # nothing checked occupancy, so a PC could carry several ACTIVE sessions at once.
+        for other in (type(self).objects
+                      .filter(computer_id=self.computer_id, session_status=SessionStatus.ACTIVE)
+                      .exclude(pk=self.pk)):
+            other.end_session()
+        self.current_session_start = now
         self.session_status = SessionStatus.ACTIVE
         self.save(update_fields=["current_session_start", "session_status"])
 
     def end_session(self, hours_played: float = None):
-        """End current gaming session"""
+        """End current gaming session.
+
+        Idempotent and server-authoritative: only an ACTIVE session can be ended, and
+        the duration is computed from current_session_start — NOT from the client's
+        hours_played (which let a duplicate/retried end call double-count, or any client
+        inflate its own stats). A second end call updates 0 rows and is a no-op.
+        """
         from decimal import Decimal
         from django.db.models import F
         from django.utils import timezone
-        fields = {
-            "current_session_start": None,
-            "session_status": SessionStatus.ENDED,
-            "last_played": timezone.now(),
-        }
-        if hours_played:
-            # F() so a concurrent update_hours ping isn't clobbered.
-            fields["total_hours_played"] = F("total_hours_played") + Decimal(str(hours_played))
-        type(self).objects.filter(pk=self.pk).update(**fields)
+
+        now = timezone.now()
+        active = (type(self).objects
+                  .filter(pk=self.pk, session_status=SessionStatus.ACTIVE).first())
+        if not active:
+            return  # already ended / never started — no-op (idempotent)
+        add = Decimal("0")
+        if active.current_session_start:
+            secs = max(0.0, (now - active.current_session_start).total_seconds())
+            add = Decimal(str(secs / 3600.0))
+        type(self).objects.filter(pk=self.pk, session_status=SessionStatus.ACTIVE).update(
+            current_session_start=None,
+            session_status=SessionStatus.ENDED,
+            last_played=now,
+            total_hours_played=F("total_hours_played") + add,
+        )
         self.refresh_from_db()

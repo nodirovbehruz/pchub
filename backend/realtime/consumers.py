@@ -39,11 +39,19 @@ class ClientConsumer(AsyncWebsocketConsumer):
         # The club OWNER has user_type='user' (owns via Club.owner), so we must check
         # ownership/membership, not just user_type.
         self.is_operator = await self._is_operator_of(self.club_id)
+        # SECURITY: was joining club_<id> straight from the raw ?club= value with NO
+        # membership check, so any authenticated user could pass another club's id and
+        # receive its chat/announcements (cross-tenant leak). Only join if the user
+        # actually belongs to this club (operator, member, or a client seated there).
+        can_join_club = bool(self.club_group) and (
+            self.is_operator or await self._is_member_of(self.club_id))
         self.ops_group = f"club_ops_{self.club_id}" if (self.club_id and self.is_operator) else None
 
         await self.channel_layer.group_add(self.user_group, self.channel_name)
-        if self.club_group:
+        if can_join_club:
             await self.channel_layer.group_add(self.club_group, self.channel_name)
+        else:
+            self.club_group = None
         if self.ops_group:
             await self.channel_layer.group_add(self.ops_group, self.channel_name)
 
@@ -72,9 +80,11 @@ class ClientConsumer(AsyncWebsocketConsumer):
             text = (data.get("text") or "").strip()
             if text:
                 info = await self._store_client_chat(text)
-                # Push to the club's operators in realtime (admin chat panel).
-                if info and self.club_id:
-                    await self.channel_layer.group_send(f"club_ops_{self.club_id}", {
+                # Push to the club's operators in realtime (admin chat panel). SECURITY:
+                # target the PC's REAL club (info["club_id"]), not the attacker-chosen
+                # self.club_id — was letting a client inject chat into another club's inbox.
+                if info and info.get("club_id"):
+                    await self.channel_layer.group_send(f"club_ops_{info['club_id']}", {
                         "type": "chat.inbox",
                         "computer_id": info["computer_id"],
                         "computer_name": info["computer_name"],
@@ -106,11 +116,37 @@ class ClientConsumer(AsyncWebsocketConsumer):
                 from_admin=False, sender_name=name, text=text, is_read=False,
             )
             return {
-                "computer_id": pc.id, "computer_name": pc.name,
+                "computer_id": pc.id, "computer_name": pc.name, "club_id": pc.club_id,
                 "sender_name": name, "created_at": m.created_at.isoformat(),
             }
         except Exception:
             return None
+
+    @database_sync_to_async
+    def _is_member_of(self, club_id):
+        """True if this user legitimately belongs to the club broadcast group: a client
+        with a per-club profile, or the guest/seated user of a PC in this club."""
+        if not club_id:
+            return False
+        try:
+            from apps.clubs.models import UserClubProfile
+            if UserClubProfile.objects.filter(user=self.user, club_id=club_id).exists():
+                return True
+            from apps.computers.models import Computer
+            uname = getattr(self.user, "username", "") or ""
+            if uname.startswith("guest-pc-"):
+                try:
+                    pc_id = int(uname.rsplit("-", 1)[1])
+                    if Computer.objects.filter(id=pc_id, club_id=club_id).exists():
+                        return True
+                except (ValueError, IndexError):
+                    pass
+            hw = getattr(self.user, "active_hardware_id", "") or ""
+            if hw and Computer.objects.filter(hardware_id=hw, club_id=club_id).exists():
+                return True
+            return False
+        except Exception:
+            return False
 
     @database_sync_to_async
     def _is_operator_of(self, club_id):

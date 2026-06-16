@@ -99,11 +99,19 @@ def _free_pc_for_booking(pc) -> bool:
             pc.save(update_fields=["status"])
             freed = True
 
-        # Lock the shell back to the login screen for the incoming booker.
-        ComputerCommand.objects.create(
-            computer=pc, command_type=CommandType.LOCK,
-            status=CommandStatus.PENDING, payload={"reason": "booking"},
-        )
-        return freed
+        # Lock the shell back to the login screen for the incoming booker. IDEMPOTENT:
+        # this task runs every minute for the WHOLE pre-booking window, so it used to
+        # enqueue a fresh LOCK command each tick (and re-close a just-seated client).
+        # Only enqueue if there isn't already a pending booking LOCK for this PC.
+        has_pending_lock = ComputerCommand.objects.filter(
+            computer=pc, command_type=CommandType.LOCK, status=CommandStatus.PENDING,
+        ).exists()
+        if not has_pending_lock:
+            ComputerCommand.objects.create(
+                computer=pc, command_type=CommandType.LOCK,
+                status=CommandStatus.PENDING, payload={"reason": "booking"},
+            )
+            return freed
+        return False
     except Exception:
         return False

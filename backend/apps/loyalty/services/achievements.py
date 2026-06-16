@@ -8,19 +8,26 @@ from decimal import Decimal
 
 
 def _apply_reward(profile, ach):
-    """Apply an achievement reward to the client's per-club profile."""
+    """Apply an achievement reward to the client's per-club profile.
+
+    Uses DB-side F() updates so the bonus credit can't be clobbered by a concurrent
+    topup/POS mutation on the same profile (was a plain read-modify-write running
+    OUTSIDE the caller's transaction → lost updates)."""
     from apps.loyalty.models.achievement import RewardType
+    from django.db.models import F
     if profile is None or not ach.reward_value:
         return
     try:
+        cls = type(profile)
         if ach.reward_type == RewardType.DISCOUNT:
             # Raise the personal discount to at least the reward (never lower it).
-            cur = profile.personal_discount or 0
-            profile.personal_discount = max(int(cur), int(ach.reward_value))
-            profile.save(update_fields=["personal_discount"])
+            new = max(int(profile.personal_discount or 0), int(ach.reward_value))
+            cls.objects.filter(pk=profile.pk).update(personal_discount=new)
+            profile.personal_discount = new
         elif ach.reward_type == RewardType.BONUS:
-            profile.bonus_balance = (profile.bonus_balance or Decimal("0")) + ach.reward_value
-            profile.save(update_fields=["bonus_balance"])
+            cls.objects.filter(pk=profile.pk).update(
+                bonus_balance=F("bonus_balance") + ach.reward_value)
+            profile.refresh_from_db(fields=["bonus_balance"])
     except Exception:
         pass
 

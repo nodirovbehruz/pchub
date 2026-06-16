@@ -45,7 +45,9 @@ class ReviewSerializer(serializers.ModelSerializer):
             "is_anonymous", "is_read",
             "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        # tip_amount/tip_admin/is_read are STAFF-controlled — a client creating a review
+        # must not set them (was writable → a client could self-assign tips / mark read).
+        read_only_fields = ["id", "created_at", "tip_amount", "tip_admin", "is_read"]
         extra_kwargs = {
             # Filled server-side from the authenticated user / tenant.
             "client": {"required": False},
@@ -66,7 +68,8 @@ class AdminCallSerializer(serializers.ModelSerializer):
             "id", "club", "computer", "computer_name", "client", "client_username", "shift",
             "answered_by", "called_at", "answered_at", "note", "is_answered",
         ]
-        read_only_fields = ["id", "called_at", "is_answered"]
+        # answered_by/answered_at are set by the answer endpoint, not the client body.
+        read_only_fields = ["id", "called_at", "is_answered", "answered_by", "answered_at"]
         extra_kwargs = {
             # Filled server-side from the authenticated user / tenant.
             "client": {"required": False},

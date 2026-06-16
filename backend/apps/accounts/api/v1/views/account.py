@@ -167,6 +167,22 @@ def _can_manage_staff(request):
         return False
 
 
+def _staff_target_in_club(emp, club_id):
+    """SECURITY: the target employee must belong to the manager's OWN club. Staff
+    endpoints fetched the target by global id with no scope, so a manager of club A
+    could edit/delete — and privilege-escalate (role=owner → is_superuser) — staff or
+    owners of club B. Platform admins bypass this (checked separately)."""
+    if not club_id:
+        return False
+    try:
+        from apps.clubs.models import Club, ClubMembership
+        if Club.objects.filter(id=club_id, owner=emp).exists():
+            return True
+        return ClubMembership.objects.filter(user=emp, club_id=club_id, is_active=True).exists()
+    except Exception:
+        return False
+
+
 class EmployeeListAPIView(APIView):
     """
     GET  /api/v1/accounts/employees/  – list staff for current club
@@ -223,6 +239,9 @@ class EmployeeListAPIView(APIView):
             return Response({'error': 'Пароль минимум 6 символов'}, status=status.HTTP_400_BAD_REQUEST)
         if CustomUser.objects.filter(username__iexact=username).exists():
             return Response({'error': 'Пользователь с таким логином уже существует'}, status=status.HTTP_400_BAD_REQUEST)
+        # phone is unique=True — a duplicate raised an unhandled IntegrityError (500).
+        if phone and CustomUser.objects.filter(phone=phone).exists():
+            return Response({'error': 'Телефон уже занят'}, status=status.HTTP_400_BAD_REQUEST)
 
         # SECURITY: do NOT allow assigning user_type='admin' here — that is the
         # PLATFORM super-admin, which bypasses club isolation for ALL clubs. A club
@@ -289,6 +308,12 @@ class EmployeeManageAPIView(APIView):
         except CustomUser.DoesNotExist:
             return Response({'error': 'Пользователь не найден'}, status=status.HTTP_404_NOT_FOUND)
 
+        # SECURITY: confirm the target belongs to the caller's club (unless platform admin).
+        is_platform_admin = getattr(request.user, "user_type", "") == "admin"
+        scope_club = getattr(request, 'current_club_id', None) or request.data.get('club') or request.query_params.get('club')
+        if not is_platform_admin and not _staff_target_in_club(emp, scope_club):
+            return Response({'error': 'Нет прав на этого сотрудника'}, status=status.HTTP_403_FORBIDDEN)
+
         role = request.data.get('role', emp.user_type)
         if request.data.get('first_name') is not None:
             emp.first_name = request.data['first_name']
@@ -338,11 +363,18 @@ class EmployeeManageAPIView(APIView):
         except CustomUser.DoesNotExist:
             return Response({'error': 'Пользователь не найден'}, status=status.HTTP_404_NOT_FOUND)
 
+        is_platform_admin = getattr(request.user, "user_type", "") == "admin"
         club_id = (
             getattr(request, 'current_club_id', None)
             or request.data.get('club')
             or request.query_params.get('club')
         )
+
+        # SECURITY: a non-admin may only remove a target that belongs to their OWN club.
+        # Was fetched by global id, and the "no club context" branch did a GLOBAL demotion
+        # — letting a manager of one club demote/lock out another club's owner.
+        if not is_platform_admin and not _staff_target_in_club(emp, club_id):
+            return Response({'error': 'Нет прав на этого сотрудника'}, status=status.HTTP_403_FORBIDDEN)
 
         if club_id:
             # Remove from this club only
@@ -361,12 +393,14 @@ class EmployeeManageAPIView(APIView):
                     emp.save(update_fields=['user_type', 'is_staff', 'is_superuser'])
             except Exception:
                 pass
-        else:
-            # No club context — global demotion (legacy fallback)
+        elif is_platform_admin:
+            # No club context — global demotion is only for the platform admin.
             emp.user_type = USER_TYPES.USER
             emp.is_staff = False
             emp.is_superuser = False
             emp.save(update_fields=['user_type', 'is_staff', 'is_superuser'])
+        else:
+            return Response({'error': 'Не указан клуб'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             from apps.billing.services.audit import log_action
@@ -430,6 +464,10 @@ class ClientCreateAPIView(APIView):
 
         if email and CustomUser.objects.filter(email__iexact=email).exists():
             return Response({'error': 'Email уже занят'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # phone is unique=True — a duplicate raised an unhandled IntegrityError (500).
+        if phone and CustomUser.objects.filter(phone=phone).exists():
+            return Response({'error': 'Телефон уже занят'}, status=status.HTTP_400_BAD_REQUEST)
 
         client = CustomUser(
             username=username,
@@ -498,8 +536,17 @@ class UserSearchAPIView(APIView):
         if not q or len(q) < 2:
             return Response([])
 
+        # SECURITY: was searching ALL users platform-wide → any authenticated user could
+        # enumerate every club's clients (names, phones). Scope to clients of the caller's
+        # own club (those with a UserClubProfile there).
+        from apps.clubs.api.v1.mixins import validated_club_id
+        from apps.clubs.models import UserClubProfile
+        cid = validated_club_id(request)
+        if not cid:
+            return Response([])
+        member_ids = UserClubProfile.objects.filter(club_id=cid).values_list('user_id', flat=True)
         users = CustomUser.objects.filter(
-            Q(username__icontains=q) | Q(email__icontains=q)
+            (Q(username__icontains=q) | Q(email__icontains=q)) & Q(id__in=member_ids)
         )[:20]
 
         result = []

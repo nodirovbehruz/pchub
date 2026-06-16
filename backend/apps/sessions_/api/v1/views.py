@@ -11,6 +11,25 @@ from apps.sessions_.api.v1.serializers import (
 from apps.sessions_.models import AdminCall, ClientSession, Review
 
 
+def _is_club_staff(user, club_id):
+    """Operator/manager/owner/platform-admin of the club — marking reviews read and
+    answering admin-calls are STAFF actions; was open to any authenticated client."""
+    if not club_id:
+        return False
+    if getattr(user, "user_type", "") == "admin":
+        return True
+    try:
+        from apps.clubs.models import Club, ClubMembership
+        if Club.objects.filter(id=club_id, owner=user).exists():
+            return True
+        return ClubMembership.objects.filter(
+            user=user, club_id=club_id, is_active=True,
+            role__in=["owner", "manager", "operator"],
+        ).exists()
+    except Exception:
+        return False
+
+
 class ClientSessionListAPIView(TenantFilterMixin, generics.ListAPIView):
     serializer_class = ClientSessionSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -51,6 +70,8 @@ class ReviewMarkReadAPIView(TenantFilterMixin, generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         obj = self.get_object()
+        if not _is_club_staff(request.user, obj.club_id):
+            return Response({"detail": "Только для персонала клуба"}, status=status.HTTP_403_FORBIDDEN)
         obj.is_read = True
         obj.save(update_fields=["is_read"])
         return Response(self.get_serializer(obj).data)
@@ -75,6 +96,8 @@ class AdminCallAnswerAPIView(TenantFilterMixin, generics.UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         obj = self.get_object()
+        if not _is_club_staff(request.user, obj.club_id):
+            return Response({"detail": "Только для персонала клуба"}, status=status.HTTP_403_FORBIDDEN)
         if not obj.answered_at:
             obj.answered_at = timezone.now()
             obj.answered_by = request.user

@@ -61,4 +61,5 @@ class CashbackRule(models.Model):
             return Decimal("0")
         if self.accrual_type == CashbackAccrualType.PERCENT:
             return (topup_amount * self.value / Decimal("100")).quantize(Decimal("0.01"))
-        return self.value
+        # FIXED: never give back more bonus than the client actually paid in.
+        return min(self.value, topup_amount)

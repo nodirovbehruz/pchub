@@ -37,23 +37,30 @@ class BookingListCreateAPIView(TenantFilterMixin, generics.ListCreateAPIView):
             if getattr(h, "club_id", None) != club_id:
                 raise ValidationError({"hosts": "ПК не принадлежит этому клубу"})
 
-        # Reject time-overlapping bookings on the same PC (was no conflict check →
-        # two operators could double-book the same slot).
+        # Reject time-overlapping bookings on the same PC. The check+save run in one
+        # transaction with the host PCs row-locked, so two operators booking the same
+        # slot concurrently serialize (was a check-then-save TOCTOU → double-booking).
+        from django.db import transaction
+        from apps.computers.models import Computer
         from_at = serializer.validated_data.get("from_at")
         to_at = serializer.validated_data.get("to_at")
-        if from_at and to_at:
-            if to_at <= from_at:
-                raise ValidationError({"to_at": "Конец брони должен быть позже начала"})
-            host_ids = [h.id for h in hosts]
+        host_ids = [h.id for h in hosts]
+        with transaction.atomic():
             if host_ids:
-                clash = (Booking.objects
-                         .filter(club_id=club_id, status__in=[BookingStatus.ACTIVE, BookingStatus.REDEEMED],
-                                 hosts__id__in=host_ids,
-                                 from_at__lt=to_at, to_at__gt=from_at)
-                         .exists())
-                if clash:
-                    raise ValidationError({"hosts": "На это время ПК уже забронирован"})
-        serializer.save(created_by=self.request.user, club_id=club_id)
+                # Lock the PC rows first so overlapping checks can't interleave.
+                list(Computer.objects.select_for_update().filter(id__in=host_ids))
+            if from_at and to_at:
+                if to_at <= from_at:
+                    raise ValidationError({"to_at": "Конец брони должен быть позже начала"})
+                if host_ids:
+                    clash = (Booking.objects
+                             .filter(club_id=club_id, status__in=[BookingStatus.ACTIVE, BookingStatus.REDEEMED],
+                                     hosts__id__in=host_ids,
+                                     from_at__lt=to_at, to_at__gt=from_at)
+                             .exists())
+                    if clash:
+                        raise ValidationError({"hosts": "На это время ПК уже забронирован"})
+            serializer.save(created_by=self.request.user, club_id=club_id)
 
 
 class BookingDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIView):
@@ -62,6 +69,16 @@ class BookingDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIV
     serializer_class = BookingSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = Booking.objects.all().prefetch_related("hosts")
+
+    def perform_update(self, serializer):
+        # Enforce a one-way lifecycle: a terminal booking (CANCELED/FINISHED) must not
+        # be re-opened. `status` was freely writable, so a client could PATCH a finished
+        # /cancelled booking back to ACTIVE and bypass the no-show / billing logic.
+        instance = self.get_object()
+        new_status = serializer.validated_data.get("status", instance.status)
+        if instance.status in (BookingStatus.CANCELED, BookingStatus.FINISHED) and new_status != instance.status:
+            raise ValidationError({"status": "Завершённую/отменённую бронь нельзя переоткрыть"})
+        serializer.save()
 
 
 class BookingRedeemAPIView(APIView):
@@ -83,10 +100,14 @@ class BookingRedeemAPIView(APIView):
         if booking_id:
             booking = qs.filter(pk=booking_id).first()
         elif computer_id:
-            # The booking on this PC whose window is closest to now (started or imminent).
+            # Prefer the booking whose window currently CONTAINS now; only then fall
+            # back to the nearest imminent one. (Ordering by -from_at alone picked a
+            # future booking over the one actually in progress → redeemed the wrong slot.)
             now = timezone.now()
-            booking = (qs.filter(hosts__id=computer_id, from_at__lte=now + timezone.timedelta(minutes=30))
-                       .order_by("-from_at").first())
+            base = qs.filter(hosts__id=computer_id)
+            booking = (base.filter(from_at__lte=now, to_at__gt=now).order_by("from_at").first()
+                       or base.filter(from_at__gt=now, from_at__lte=now + timezone.timedelta(minutes=30))
+                              .order_by("from_at").first())
         else:
             return Response({"error": "Нужен computer_id или booking_id"}, status=status.HTTP_400_BAD_REQUEST)
 
