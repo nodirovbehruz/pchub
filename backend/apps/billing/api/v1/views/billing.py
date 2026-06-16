@@ -147,7 +147,17 @@ class UserClubProfilePatchAPIView(APIView):
         update_fields = []
         for field in allowed:
             if field in request.data:
-                setattr(profile, field, request.data[field])
+                val = request.data[field]
+                if field == "personal_discount":
+                    # Clamp 0..100 — was stored unchecked, and a value >100 makes
+                    # ClientBuyTariff compute a NEGATIVE price (deposit increases, free
+                    # minutes, negative Payment poisons revenue). Hard-bound it here.
+                    try:
+                        val = max(0, min(100, int(val)))
+                    except (TypeError, ValueError):
+                        return Response({"error": "personal_discount должен быть 0..100"},
+                                        status=status.HTTP_400_BAD_REQUEST)
+                setattr(profile, field, val)
                 update_fields.append(field)
         if update_fields:
             profile.save(update_fields=update_fields)
@@ -643,7 +653,10 @@ class PaymentRefundAPIView(APIView):
                 # C1: reclaim the purchased minutes from the PER-CLUB ledger the shell
                 # reads (was deducting the legacy global UserBalance → time never
                 # reclaimed, client kept the time while money was returned).
-                if payment.user and payment.minutes_added > 0:
+                # Skip postpaid bills: a [POSTPAID] payment records minutes PLAYED on
+                # credit (never added to minutes_remaining), so reversing them here would
+                # destroy unrelated prepaid time the client actually bought.
+                if payment.user and payment.minutes_added > 0 and "[POSTPAID]" not in (payment.note or ""):
                     try:
                         holder = profile or UserBalance.objects.get_or_create(user=payment.user)[0]
                         holder.minutes_remaining = max(0, (holder.minutes_remaining or 0) - payment.minutes_added)

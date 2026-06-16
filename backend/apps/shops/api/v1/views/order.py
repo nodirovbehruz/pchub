@@ -108,8 +108,11 @@ class AdminOrderPayAPIView(APIView):
         club_id = getattr(order.computer, "club_id", None)
         if not _operator_can(request.user, club_id):
             return Response({"error": "Нет прав на этот заказ"}, status=status.HTTP_403_FORBIDDEN)
-        if order.status in ("COMPLETED", "CANCELLED"):
-            return Response({"error": f"Заказ уже {order.status}"}, status=status.HTTP_400_BAD_REQUEST)
+        # Only a PENDING order may be paid. Was `status in (COMPLETED, CANCELLED)`, which
+        # let an already-paid PROCESSING order be paid AGAIN → second Payment + second
+        # deposit debit (double-charge on a retry/double-click).
+        if order.status != "PENDING":
+            return Response({"error": f"Заказ нельзя оплатить (статус: {order.status})"}, status=status.HTTP_400_BAD_REQUEST)
 
         method = (request.data.get("payment_method") or "cash").lower()
         # BUGFIX: 'deposit' must NOT map to CASH — paying from the client's deposit puts
@@ -204,7 +207,11 @@ class AdminOrderStatusAPIView(APIView):
         # money never returned).
         if new_status == "CANCELLED" and order.status != "CANCELLED":
             from django.db import transaction as _txn
-            was_paid = order.status == "PROCESSING"
+            # COMPLETED orders were also paid — was `== "PROCESSING"` only, so a
+            # delivered (COMPLETED) deposit-paid order, when cancelled, restored stock
+            # but never refunded the client's money. Cash/card orders have no
+            # [DEPOSIT][SHOP] payment, so the lookup below simply finds nothing for them.
+            was_paid = order.status in ("PROCESSING", "COMPLETED")
             with _txn.atomic():
                 for it in order.items.all():
                     try:
@@ -218,10 +225,12 @@ class AdminOrderStatusAPIView(APIView):
                     try:
                         from apps.billing.models import Payment
                         from apps.clubs.models import UserClubProfile
+                        # EXACT note match — `icontains "Заказ #1"` also matched
+                        # "Заказ #11"/"#100", refunding (and stamping [REFUNDED] on) the
+                        # WRONG order's payment. The pay note is written exactly as below.
                         pay = (Payment.objects.filter(
                             user_id=order.account_id, club_id=club_id,
-                            note__icontains=f"[DEPOSIT][SHOP] Заказ #{order.id}")
-                            .exclude(note__icontains="[REFUNDED]").first())
+                            note=f"[DEPOSIT][SHOP] Заказ #{order.id}").first())
                         if pay:
                             prof = UserClubProfile.objects.select_for_update().filter(
                                 user_id=order.account_id, club_id=club_id).first()
