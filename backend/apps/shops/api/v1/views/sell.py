@@ -192,7 +192,7 @@ class POSSellAPIView(APIView):
                     )
                     pay_total = total
                     if ClubSettings.get_bool(club_id, 'bonus_system', True):
-                        pct = ClubSettings.get_int(club_id, 'bonus_writeoff_pct', 0)
+                        pct = max(0, min(100, ClubSettings.get_int(club_id, 'bonus_writeoff_pct', 0)))
                         bal = profile.bonus_balance or Decimal('0')
                         if pct > 0 and bal > 0:
                             cap = (total * Decimal(pct) / Decimal('100')).quantize(Decimal('0.01'))

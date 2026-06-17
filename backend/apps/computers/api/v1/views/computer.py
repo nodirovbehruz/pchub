@@ -498,7 +498,13 @@ class ComputerHighAccessAPIView(APIView):
             if not allowed:
                 return Response({"error": "Нет прав на этот ПК"}, status=status.HTTP_403_FORBIDDEN)
 
-        enabled = bool(request.data.get("enabled", not pc.high_access_active))
+        # Parse the flag properly — the JSON string "false" is truthy under bool(), so
+        # toggling OFF actually turned high-access ON.
+        _raw = request.data.get("enabled", not pc.high_access_active)
+        if isinstance(_raw, str):
+            enabled = _raw.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            enabled = bool(_raw)
 
         # Pass the club's high-access password so the shell can apply it if needed.
         password = ""

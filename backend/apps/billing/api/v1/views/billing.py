@@ -366,7 +366,10 @@ class ClientBuyTariffAPIView(APIView):
                     from apps.clubs.models import ClubSettings
                     if (ClubSettings.get_bool(club_id, "bonus_system", True)
                             and ClubSettings.get_bool(club_id, "bonus_pay_tariffs", False)):
-                        pct = ClubSettings.get_int(club_id, "bonus_writeoff_pct", 0)
+                        # Clamp 0..100 — an unbounded pct made `cap` exceed the price, so
+                        # bonus_used > price → price_from_deposit went negative → the buy
+                        # INCREASED the client's deposit (free money).
+                        pct = max(0, min(100, ClubSettings.get_int(club_id, "bonus_writeoff_pct", 0)))
                         bal = profile.bonus_balance or Decimal("0")
                         if pct > 0 and bal > 0:
                             cap = (price * Decimal(pct) / Decimal("100")).quantize(Decimal("0.01"))

@@ -18,8 +18,15 @@ class BookingListCreateAPIView(TenantFilterMixin, generics.ListCreateAPIView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        from_date = self.request.query_params.get("from")
-        to_date = self.request.query_params.get("to")
+        # Parse the date params — a malformed ?from/?to (e.g. "abc") fed straight into
+        # a datetime filter raised ValidationError → HTTP 500. Ignore unparseable values.
+        from django.utils.dateparse import parse_datetime, parse_date
+
+        def _parse(v):
+            return (parse_datetime(v) or parse_date(v)) if v else None
+
+        from_date = _parse(self.request.query_params.get("from"))
+        to_date = _parse(self.request.query_params.get("to"))
         if from_date:
             qs = qs.filter(from_at__gte=from_date)
         if to_date:
@@ -33,6 +40,10 @@ class BookingListCreateAPIView(TenantFilterMixin, generics.ListCreateAPIView):
         if not club_id:
             raise PermissionDenied("Нет доступа к клубу")
         hosts = serializer.validated_data.get("hosts", [])
+        # A booking with no hosts is a phantom reservation (occupies nothing, shows
+        # nowhere) — require at least one PC.
+        if not hosts:
+            raise ValidationError({"hosts": "Укажите хотя бы один ПК"})
         for h in hosts:
             if getattr(h, "club_id", None) != club_id:
                 raise ValidationError({"hosts": "ПК не принадлежит этому клубу"})

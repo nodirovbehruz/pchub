@@ -67,7 +67,11 @@ class ReviewListAPIView(TenantFilterMixin, generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # The client never supplies their own identity or club — derive them
         # server-side from the authenticated user and resolved tenant.
+        from rest_framework.exceptions import ValidationError
         club_id = getattr(self.request, "current_club_id", None) or self.request.data.get("club")
+        if not club_id:
+            # club is NOT NULL — without a resolved club this 500'd on IntegrityError.
+            raise ValidationError({"club": "Не удалось определить клуб (укажите ?club=)"})
         serializer.save(client=self.request.user, club_id=club_id)
 
 
@@ -93,7 +97,10 @@ class AdminCallListCreateAPIView(TenantFilterMixin, generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # A client calling the operator is always themselves, in the current club.
         # computer may be supplied by the shell (it knows its own DB id) or left null.
+        from rest_framework.exceptions import ValidationError
         club_id = getattr(self.request, "current_club_id", None) or self.request.data.get("club")
+        if not club_id:
+            raise ValidationError({"club": "Не удалось определить клуб (укажите ?club=)"})
         serializer.save(client=self.request.user, club_id=club_id)
 
 

@@ -88,7 +88,10 @@ class ComputerMetricsHistoryAPIView(APIView):
     service = ComputerMetricsService()
 
     def get(self, request, computer_id):
-        hours = int(request.query_params.get("hours", 24))
+        try:
+            hours = int(request.query_params.get("hours", 24))
+        except (TypeError, ValueError):
+            return Response({"error": "hours должен быть числом"}, status=status.HTTP_400_BAD_REQUEST)
 
         # SECURITY (IDOR): was keyed only by computer_id with no club check — any
         # authenticated user could read any club's PC metrics by iterating ids. Scope
