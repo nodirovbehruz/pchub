@@ -64,6 +64,16 @@ class ReviewListAPIView(TenantFilterMixin, generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     queryset = Review.objects.all().select_related("client", "computer", "session")
 
+    def get_queryset(self):
+        # ?is_read filter was ignored (no unread view). Apply on top of tenant scope.
+        qs = super().get_queryset()
+        r = (self.request.query_params.get("is_read") or "").lower()
+        if r in ("1", "true"):
+            qs = qs.filter(is_read=True)
+        elif r in ("0", "false"):
+            qs = qs.filter(is_read=False)
+        return qs
+
     def perform_create(self, serializer):
         # The client never supplies their own identity or club — derive them
         # server-side from the authenticated user and resolved tenant.
@@ -93,6 +103,16 @@ class AdminCallListCreateAPIView(TenantFilterMixin, generics.ListCreateAPIView):
     serializer_class = AdminCallSerializer
     permission_classes = [permissions.IsAuthenticated]
     queryset = AdminCall.objects.all().select_related("computer", "client")
+
+    def get_queryset(self):
+        # ?is_answered filter was ignored (no unanswered queue view).
+        qs = super().get_queryset()
+        a = (self.request.query_params.get("is_answered") or "").lower()
+        if a in ("1", "true"):
+            qs = qs.filter(answered_at__isnull=False)
+        elif a in ("0", "false"):
+            qs = qs.filter(answered_at__isnull=True)
+        return qs
 
     def perform_create(self, serializer):
         # A client calling the operator is always themselves, in the current club.

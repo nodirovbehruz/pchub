@@ -56,6 +56,28 @@ class TaskListCreateAPIView(TenantCreateMixin, TenantFilterMixin, generics.ListC
     permission_classes = [permissions.IsAuthenticated]
     queryset = Task.objects.all()
 
+    def get_queryset(self):
+        # Filters (?is_finished, ?assigned_to, ?search) were silently ignored — the UI
+        # offered them but the list never narrowed. Apply them on top of the tenant scope.
+        import uuid as _uuid
+        from django.db.models import Q
+        qs = super().get_queryset()
+        p = self.request.query_params
+        fin = (p.get("is_finished") or "").lower()
+        if fin in ("1", "true"):
+            qs = qs.filter(is_finished=True)
+        elif fin in ("0", "false"):
+            qs = qs.filter(is_finished=False)
+        if p.get("assigned_to"):
+            try:
+                qs = qs.filter(assigned_to_id=_uuid.UUID(str(p.get("assigned_to"))))
+            except (ValueError, TypeError):
+                pass
+        if p.get("search"):
+            s = p.get("search")
+            qs = qs.filter(Q(title__icontains=s) | Q(body__icontains=s))
+        return qs
+
     def tenant_create_extra(self):
         return {"created_by": self.request.user}
 

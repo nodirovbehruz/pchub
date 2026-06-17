@@ -40,6 +40,11 @@ class GameCategoryListCreateAPIView(APIView):
         order = request.data.get("order")
         if order is None:
             order = Category.objects.count()
+        else:
+            try:
+                order = int(order)
+            except (TypeError, ValueError):
+                return Response({"error": "order должен быть числом"}, status=status.HTTP_400_BAD_REQUEST)
 
         cat = Category.objects.create(name=name, slug=slug, order=order)
         return Response(_serialize(cat), status=status.HTTP_201_CREATED)
