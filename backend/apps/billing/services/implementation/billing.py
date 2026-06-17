@@ -48,6 +48,12 @@ class BillingService:
         # Credit the club deposit so client can buy tariffs in the shell.
         # Skip for penalties — a fine is club income, not client credit.
         is_penalty = "[PENALTY]" in (note or "")
+        # Mark deposit-crediting topups so a later refund can reliably DEBIT the deposit
+        # back. A combined time+money topup has minutes>0, so the refund can't key off
+        # minutes_added==0; session-start payments also add minutes but DON'T credit the
+        # deposit and get no mark → they won't be wrongly debited on refund.
+        if amount_paid > 0 and not is_penalty and "[TOPUP]" not in (note or ""):
+            note = (note or "") + " [TOPUP]"
         deposit_after = Decimal("0")
         if profile and amount_paid > 0 and not is_penalty:
             try:

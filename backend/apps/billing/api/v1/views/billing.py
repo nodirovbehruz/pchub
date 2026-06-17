@@ -705,8 +705,16 @@ class PaymentRefundAPIView(APIView):
                 # top-up time; refunding it (the РКО below returns the cash) must DEBIT
                 # that deposit back — else the client keeps free balance. POS sales are
                 # handled in the is_pos branch; postpaid never credits deposit.
+                # Key off the [TOPUP] marker, NOT minutes_added==0 — a COMBINED time+money
+                # topup credited the deposit too but has minutes>0, so the old gate skipped
+                # it and the client kept the deposit on refund (free money). The marker
+                # also excludes session-start cash payments (minutes>0, no deposit credit).
+                # Key off the [TOPUP] marker, NOT minutes_added==0 — a COMBINED time+money
+                # topup credited the deposit too but has minutes>0, so the old gate skipped
+                # it and the client kept the deposit on refund (free money). The marker
+                # also excludes session-start cash payments (minutes>0, no deposit credit).
                 elif (profile is not None and payment.payment_method in ("cash", "card")
-                      and (payment.minutes_added or 0) == 0
+                      and "[TOPUP]" in note
                       and "[POSTPAID]" not in note and payment.amount_paid):
                     try:
                         profile.deposit_money = max(_D("0"), (profile.deposit_money or _D("0")) - payment.amount_paid)
