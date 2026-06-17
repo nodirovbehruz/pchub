@@ -502,6 +502,13 @@ class AdminSessionFineAPIView(APIView):
         with _txn.atomic():
             profile = svc._get_profile(target, pc.club_id)
             base = profile or svc.get_or_create_user_balance(target)
+            # A minute-fine only applies to PREPAID time. On a POSTPAID session
+            # minutes_remaining is 0 → the deduction is a no-op, AND the realtime push
+            # below would compute has_access from minutes_remaining=0 and wrongly KICK
+            # the postpaid client. Reject with a clear message instead.
+            if getattr(base, "session_mode", "prepaid") == getattr(base, "SESSION_POSTPAID", "postpaid"):
+                return Response({'error': 'Штраф в минутах неприменим к постоплатной сессии'},
+                                status=status.HTTP_400_BAD_REQUEST)
             # Lock the row before mutating (deduct can't go below zero).
             holder = base.__class__.objects.select_for_update().get(pk=base.pk)
             holder.minutes_remaining = max(0, (holder.minutes_remaining or 0) - minutes)
