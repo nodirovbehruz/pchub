@@ -56,7 +56,19 @@ class ClientSessionDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateAPIVi
         obj = self.get_object()
         if not _is_club_staff(request.user, obj.club_id):
             return Response({"detail": "Только для персонала клуба"}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+        resp = super().update(request, *args, **kwargs)
+        # Stamp the terminal timestamps — a PATCH to status=finished/cancelled left
+        # finished_at/cancelled_at NULL (broken «когда завершилась» reporting).
+        from django.utils import timezone
+        obj.refresh_from_db()
+        fields = []
+        if obj.status == "finished" and obj.finished_at is None:
+            obj.finished_at = timezone.now(); fields.append("finished_at")
+        if obj.status == "cancelled" and obj.cancelled_at is None:
+            obj.cancelled_at = timezone.now(); fields.append("cancelled_at")
+        if fields:
+            obj.save(update_fields=fields)
+        return resp
 
 
 class ReviewListAPIView(TenantFilterMixin, generics.ListCreateAPIView):

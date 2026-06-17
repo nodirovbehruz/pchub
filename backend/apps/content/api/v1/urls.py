@@ -29,6 +29,13 @@ class NewsSerializer(drf_serializers.ModelSerializer):
             return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
         return f"https://picsum.photos/seed/news-{obj.id}/624/352"
 
+    def validate_title(self, value):
+        # SmartShell spec: title 2..40. max_length=40 is enforced by the field; the
+        # 2-char minimum was not, so a 1-char/blank title slipped through.
+        if value is not None and len(value.strip()) < 2:
+            raise drf_serializers.ValidationError("Заголовок: минимум 2 символа")
+        return value
+
     def validate_cover_image(self, value):
         # The field documents «≤640 КБ, .jpg/.png» but had no validators — an operator
         # could upload a huge or wrong-format file (disk bloat, broken shell layout).
