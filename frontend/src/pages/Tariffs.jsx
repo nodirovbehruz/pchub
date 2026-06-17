@@ -323,9 +323,11 @@ const Tariffs = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // all=1: admin panel must see INACTIVE tariffs to re-enable them; also limit=500
+      // so the list isn't capped at the default 20.
       const url = clubId
-        ? `/api/v1/billing/tariffs/?club=${clubId}`
-        : `/api/v1/billing/tariffs/`;
+        ? `/api/v1/billing/tariffs/?club=${clubId}&all=1&limit=500`
+        : `/api/v1/billing/tariffs/?all=1&limit=500`;
       const json = await apiFetch(url);
       setTariffs(json.results || json || []);
     } catch (e) {

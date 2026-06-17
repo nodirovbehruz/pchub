@@ -122,7 +122,8 @@ class ComputerSerializer(serializers.ModelSerializer):
             from apps.bookings.models import Booking, BookingStatus
             from django.utils import timezone
             b = Booking.objects.filter(
-                hosts=obj, status=BookingStatus.ACTIVE, to_at__gte=timezone.now(),
+                hosts=obj, status__in=[BookingStatus.ACTIVE, BookingStatus.REDEEMED],
+                to_at__gte=timezone.now(),
             ).order_by("from_at").first()
             return self._ser_booking(b)
         except Exception:

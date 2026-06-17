@@ -1082,7 +1082,12 @@ class TariffPlanListAPIView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        qs = TariffPlan.objects.filter(is_active=True).prefetch_related("prices")
+        qs = TariffPlan.objects.all().prefetch_related("prices")
+        # Admin passes ?all=1 to see/re-enable INACTIVE tariffs (otherwise a disabled
+        # tariff vanished from the panel and could never be reactivated). Default stays
+        # active-only so the client shell never sees disabled tariffs.
+        if self.request.query_params.get("all") not in ("1", "true", "yes"):
+            qs = qs.filter(is_active=True)
         club_id = self.request.query_params.get("club")
         if club_id:
             qs = qs.filter(club_id=club_id)

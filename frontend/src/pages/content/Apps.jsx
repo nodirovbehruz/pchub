@@ -501,7 +501,7 @@ const Apps = () => {
     setLoading(true);
     try {
       const [gJson, cJson] = await Promise.all([
-        apiFetch('/api/v1/games/games/?limit=500').catch(() => ({ results: [] })),
+        apiFetch('/api/v1/games/games/?limit=500&all=1').catch(() => ({ results: [] })),
         apiFetch('/api/v1/games/categories/').catch(() => []),
       ]);
       setGames(gJson.results || gJson || []);

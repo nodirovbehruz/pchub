@@ -49,9 +49,15 @@ class GameCreateService(IGameCreateService):
 
     def execute(self, data: Dict[str, Any]) -> Game:
         """Create new game with auto-generated slug"""
-        # Auto-generate slug if not provided
+        # Auto-generate slug if not provided. slugify() on a purely Cyrillic/Uzbek name
+        # returns "" (non-ASCII stripped), which left the game with an empty slug → its
+        # <slug:slug> detail/update/delete routes never matched (404). Fall back to a
+        # unique generated slug so every game is addressable.
         if "slug" not in data or not data["slug"]:
             data["slug"] = slugify(data["name"])
+        if not data["slug"]:
+            import uuid
+            data["slug"] = "game-" + uuid.uuid4().hex[:12]
 
         # Ensure slug uniqueness
         original_slug = data["slug"]

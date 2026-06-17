@@ -142,7 +142,10 @@ class GameListAPIView(generics.ListAPIView):
         """
         Override to include computed properties for sorting
         """
-        queryset = self.service.execute(is_active=True)
+        # Admin passes ?all=1 to see/re-enable INACTIVE games (a disabled game otherwise
+        # vanished from the Apps panel forever). Default stays active-only for the shell.
+        include_all = self.request.query_params.get("all") in ("1", "true", "yes")
+        queryset = Game.objects.all() if include_all else self.service.execute(is_active=True)
 
         # Annotate for sorting by statistics
         queryset = queryset.annotate(

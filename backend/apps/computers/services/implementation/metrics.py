@@ -70,8 +70,11 @@ class ComputerMetricsService(IComputerMetricsService):
             network_download_mbps=network_download,
         )
 
-        # Update computer status to ONLINE
-        computer.update_status(ComputerStatus.ONLINE)
+        # Update computer status to ONLINE — but DON'T stomp an operator-set
+        # MAINTENANCE/DISABLED state (mirrors the heartbeat path); a metrics ingest was
+        # silently flipping a maintenance PC back to ONLINE.
+        if computer.status not in (ComputerStatus.MAINTENANCE, ComputerStatus.DISABLED):
+            computer.update_status(ComputerStatus.ONLINE)
 
         return metrics
 
