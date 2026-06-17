@@ -298,9 +298,12 @@ class GameReleaseUpdateAPIView(generics.GenericAPIView):
             pc = cg.computer
             if (pc.status or "").lower() != "online" or _pc_in_session(pc):
                 continue
+            # Dedup against PENDING *and* IN_PROGRESS — same as the periodic auto-update
+            # task: a command flips to IN_PROGRESS while a large game downloads, so a
+            # PENDING-only check re-queued duplicates on repeated release clicks.
             if ComputerCommand.objects.filter(
                 computer=pc, game=game, command_type=CommandType.UPDATE,
-                status=CommandStatus.PENDING,
+                status__in=[CommandStatus.PENDING, CommandStatus.IN_PROGRESS],
             ).exists():
                 continue
             ComputerCommand.objects.create(

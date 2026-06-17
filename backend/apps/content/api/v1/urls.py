@@ -29,6 +29,17 @@ class NewsSerializer(drf_serializers.ModelSerializer):
             return request.build_absolute_uri(obj.cover_image.url) if request else obj.cover_image.url
         return f"https://picsum.photos/seed/news-{obj.id}/624/352"
 
+    def validate_cover_image(self, value):
+        # The field documents «≤640 КБ, .jpg/.png» but had no validators — an operator
+        # could upload a huge or wrong-format file (disk bloat, broken shell layout).
+        if value:
+            if getattr(value, "size", 0) > 640 * 1024:
+                raise drf_serializers.ValidationError("Обложка должна быть не больше 640 КБ")
+            name = (getattr(value, "name", "") or "").lower()
+            if not name.endswith((".jpg", ".jpeg", ".png")):
+                raise drf_serializers.ValidationError("Только формат .jpg или .png")
+        return value
+
     def validate(self, attrs):
         # A reversed window (show_until < show_from) silently makes the news permanently
         # invisible (the published filter needs show_from<=now<=show_until) — reject it.
