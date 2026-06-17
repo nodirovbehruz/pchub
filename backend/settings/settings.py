@@ -15,6 +15,11 @@ SECRET_KEY = env.str("SECRET_KEY")
 DEBUG = env.bool("DEBUG", default=False)
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[])
 
+# Was unset → Django default "America/Chicago", which skewed day/night tariff hour
+# logic and every hourly/date-range analytic by ~10-11h from the clubs' real timezone.
+TIME_ZONE = env.str("TIME_ZONE", default="Asia/Tashkent")
+USE_TZ = True
+
 if not DEBUG:
     SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

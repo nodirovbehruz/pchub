@@ -202,6 +202,12 @@ class AdminOrderStatusAPIView(APIView):
         if new_status not in ("PROCESSING", "COMPLETED", "CANCELLED"):
             return Response({"error": "Недопустимый статус"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # State guard: an order may only be marked COMPLETED once it's PAID (PROCESSING).
+        # Was allowing PENDING→COMPLETED directly via this endpoint → goods delivered
+        # with no Payment recorded (free goods). Payment happens through the pay endpoint.
+        if new_status == "COMPLETED" and order.status != "PROCESSING":
+            return Response({"error": "Заказ нужно сначала оплатить"}, status=status.HTTP_400_BAD_REQUEST)
+
         # Cancelling returns the reserved stock AND refunds a deposit-paid order
         # (was restoring stock only → client paid from deposit, order cancelled,
         # money never returned).

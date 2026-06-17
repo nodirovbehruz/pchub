@@ -378,8 +378,10 @@ class BillingService:
             holder.postpaid_minutes = 0
             holder.postpaid_started_at = None
             holder.postpaid_rate = None
-            holder.minutes_remaining = 0
-            holder.is_active = False
+            # Do NOT wipe minutes_remaining — a client may have topped up prepaid minutes
+            # DURING the postpaid session; zeroing them lost paid time. Only the postpaid
+            # debt is settled here; keep any remaining prepaid balance.
+            holder.is_active = (holder.minutes_remaining or 0) > 0
             holder.save()
 
         # Realtime: access revoked instantly → the shell ends the session at once.
