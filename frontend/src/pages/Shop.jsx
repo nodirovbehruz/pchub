@@ -561,10 +561,12 @@ const Shop = () => {
     setLoading(true);
     try {
       const [prods, servs, combs, discs] = await Promise.all([
-        apiFetch(`/api/v1/shops/admin/products/?club=${clubId || ''}`).catch(() => []),
-        apiFetch(`/api/v1/shops/services/?club=${clubId || ''}`).catch(() => []),
-        apiFetch(`/api/v1/shops/combos/?club=${clubId || ''}`).catch(() => []),
-        apiFetch(`/api/v1/loyalty/discounts/?club=${clubId || ''}`).catch(() => []),
+        // limit=500: DRF LimitOffsetPagination caps at 20 by default, which made
+        // products/services/combos #21+ unsellable in POS and hid discounts past #20.
+        apiFetch(`/api/v1/shops/admin/products/?club=${clubId || ''}&limit=500`).catch(() => []),
+        apiFetch(`/api/v1/shops/services/?club=${clubId || ''}&limit=500`).catch(() => []),
+        apiFetch(`/api/v1/shops/combos/?club=${clubId || ''}&limit=500`).catch(() => []),
+        apiFetch(`/api/v1/loyalty/discounts/?club=${clubId || ''}&limit=500`).catch(() => []),
       ]);
       setProducts(prods.results || prods || []);
       setServices(servs.results || servs || []);

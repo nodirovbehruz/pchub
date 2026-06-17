@@ -203,6 +203,9 @@ const Payments = () => {
   const [currentShift, setCurrentShift] = useState(null);
   const [orderModal, setOrderModal]   = useState(null);
   const [orderForm, setOrderForm]     = useState({ amount: '', comment: '' });
+  // BUGFIX: in-flight guard so a fast double-click on "Внести/Изъять" can't POST
+  // the same cash order twice and create duplicate ПКО/РКО records.
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [activeTab, setActiveTab]     = useState('payments');
   const [receiptPayment, setReceiptPayment] = useState(null);
 
@@ -217,7 +220,11 @@ const Payments = () => {
     try {
       const [paymentsJson, cashJson, shiftJson] = await Promise.all([
         apiFetch(`/api/v1/billing/admin/payments/?club=${clubId}`).catch(() => []),
-        apiFetch(`/api/v1/billing/cash-orders/?club=${clubId}`).catch(() => []),
+        // BUGFIX: backend uses DRF LimitOffsetPagination (default 20). Without an
+        // explicit limit the cash-orders list was silently capped at 20 rows while
+        // the UI (count badge, table, "Кассовых ордеров нет") treated it as the full
+        // list. Request a high limit so all orders are loaded.
+        apiFetch(`/api/v1/billing/cash-orders/?club=${clubId}&limit=500`).catch(() => []),
         apiFetch(`/api/v1/billing/shifts/current/`).catch(() => null),
       ]);
       setPayments(paymentsJson.results || paymentsJson || []);
@@ -290,8 +297,11 @@ const Payments = () => {
 
   /* ── Cash order ── */
   const createCashOrder = async () => {
+    // BUGFIX: bail out if a submit is already in flight (double-click guard).
+    if (orderSubmitting) return;
     const amount = parseFloat(orderForm.amount);
     if (!amount || amount <= 0) { toast('Введите сумму', { type: 'warning' }); return; }
+    setOrderSubmitting(true);
     try {
       await apiFetch('/api/v1/billing/cash-orders/', {
         method: 'POST',
@@ -300,6 +310,7 @@ const Payments = () => {
       toast(`${orderModal === 'pko' ? 'ПКО' : 'РКО'} на ${fmtMoney(amount)}`, { type: 'success' });
       setOrderModal(null); setOrderForm({ amount: '', comment: '' }); load();
     } catch (e) { toast('Ошибка: ' + (e.message || ''), { type: 'error' }); }
+    finally { setOrderSubmitting(false); }
   };
 
   /* ── iStyle ── */

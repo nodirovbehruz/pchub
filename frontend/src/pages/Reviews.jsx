@@ -25,7 +25,9 @@ const Reviews = () => {
     if (!clubId) return;
     setLoading(true);
     try {
-      const json = await apiFetch(`/api/v1/sessions/reviews/?club=${clubId}`);
+      // limit=500: stats (avg/tips/counts) are computed client-side over this list —
+      // the default 20-row cap made them wrong for clubs with more reviews.
+      const json = await apiFetch(`/api/v1/sessions/reviews/?club=${clubId}&limit=500`);
       setReviews(json.results || json || []);
     } catch (e) {
       console.error(e);

@@ -460,7 +460,10 @@ const Dashboard = () => {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead style={{ position: 'sticky', top: 0, background: 'var(--bg-panel)' }}>
                   <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    {['Никнейм', 'Траты', 'Всего часов', 'Посл. посещение'].map(h2 => (
+                    {/* BUGFIX: columns were mislabeled. The cells below render the client's
+                        deposit balance (deposit_money) and remaining play time (formatted_time),
+                        NOT spending or total hours. Labels corrected to match the data. */}
+                    {['Никнейм', 'Депозит', 'Остаток времени', 'Посл. посещение'].map(h2 => (
                       <th key={h2} style={{ padding: '8px 14px', textAlign: 'left',
                         fontSize: '10px', color: 'var(--text-muted)', fontWeight: 500,
                         textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>{h2}</th>

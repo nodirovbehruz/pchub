@@ -27,7 +27,8 @@ const AdminCalls = ({ onCountChange }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const json = await apiFetch(`/api/v1/sessions/admin-calls/${clubId ? `?club=${clubId}` : ''}`);
+      // limit=500: list + unanswered badge were capped at 20 by default pagination.
+      const json = await apiFetch(`/api/v1/sessions/admin-calls/?limit=500${clubId ? `&club=${clubId}` : ''}`);
       const list = json.results || json || [];
       setCalls(list);
       // Notify parent about unanswered count
