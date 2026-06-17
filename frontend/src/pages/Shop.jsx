@@ -14,6 +14,28 @@ const fmtMoney = (v) =>
 const fmtQty = (v) =>
   v == null ? '∞' : Number(v).toLocaleString('ru-RU') + ' шт.';
 
+/* Extract the REAL backend reason from an apiFetch error. apiFetch throws
+ * `new Error('HTTP <status>')` but attaches the parsed response body as `err.body`
+ * (e.g. { message } / { error } / { detail } / DRF field errors). Without this the
+ * operator only ever saw "HTTP 400" instead of e.g. «Недостаточно «Cola»: 3 шт.». */
+const errMsg = (e) => {
+  const b = e && e.body;
+  if (b) {
+    if (typeof b === 'string' && b.trim()) return b;
+    if (typeof b === 'object') {
+      if (b.message) return b.message;
+      if (b.error) return b.error;
+      if (b.detail) return b.detail;
+      // DRF field/non_field errors → first string we can find.
+      for (const v of Object.values(b)) {
+        if (typeof v === 'string') return v;
+        if (Array.isArray(v) && v.length && typeof v[0] === 'string') return v[0];
+      }
+    }
+  }
+  return (e && e.message) || 'Ошибка сервера';
+};
+
 /* ─── Stock entry modal (Оприходование товара) ───────────────────────── */
 const StockEntryModal = ({ products, onClose, onDone }) => {
   const { toast } = useToast();
@@ -28,17 +50,29 @@ const StockEntryModal = ({ products, onClose, onDone }) => {
     const valid = rows.filter(r => r.productId && r.qty > 0);
     if (!valid.length) { toast('Добавьте хотя бы один товар', { type: 'warning' }); return; }
     setSaving(true);
-    try {
-      await Promise.all(valid.map(r =>
-        apiFetch(`/api/v1/shops/admin/products/${r.productId}/stock/`, {
-          method: 'POST',
-          body: JSON.stringify({ delta: Number(r.qty), reason: r.comment || 'Поставка' }),
-        })
-      ));
-      toast(`Внесено: ${valid.length} позиций`, { type: 'success' });
+    // BUGFIX: Promise.all rejected on the FIRST failed row, but the rows that
+    // already succeeded had stock applied server-side — leaving partial state and
+    // never refreshing (onDone skipped). Use allSettled so we always report how
+    // many landed, surface the real per-row error, and refresh regardless.
+    const results = await Promise.allSettled(valid.map(r =>
+      apiFetch(`/api/v1/shops/admin/products/${r.productId}/stock/`, {
+        method: 'POST',
+        body: JSON.stringify({ delta: Number(r.qty), reason: r.comment || 'Поставка' }),
+      })
+    ));
+    setSaving(false);
+    const ok = results.filter(x => x.status === 'fulfilled').length;
+    const failed = results.length - ok;
+    if (failed > 0) {
+      const firstErr = results.find(x => x.status === 'rejected')?.reason;
+      toast(`Внесено: ${ok}, не удалось: ${failed}. ${errMsg(firstErr)}`,
+        { type: ok > 0 ? 'warning' : 'error' });
+      // Even on partial failure some stock changed — refresh so the catalog is accurate.
       onDone();
-    } catch (e) { toast(e.message, { type: 'error' }); }
-    finally { setSaving(false); }
+      return;
+    }
+    toast(`Внесено: ${ok} позиций`, { type: 'success' });
+    onDone();
   };
 
   return (
@@ -268,7 +302,8 @@ const LeftPanel = ({ client, onSelectClient, onClearClient, discounts, promoAppl
             {[
               { label: 'Депозит', value: fmtMoney(client.deposit_money || client.balance || 0), color: '#10b981' },
               { label: 'Бонусы',  value: fmtMoney(client.bonus_balance || 0), color: '#f59e0b' },
-              { label: 'Скидка',  value: `${client.personal_discount || 0}%`, color: '#8b5cf6' },
+              // Show effective (max of personal/group) discount — the one actually applied at checkout.
+              { label: 'Скидка',  value: `${client.effective_discount ?? client.personal_discount ?? 0}%`, color: '#8b5cf6' },
             ].map(({ label, value, color }) => (
               <div key={label} style={{ flex: 1, textAlign: 'center', padding: '6px 4px',
                 background: 'var(--hover-overlay)', borderRadius: 8 }}>
@@ -347,13 +382,25 @@ const LeftPanel = ({ client, onSelectClient, onClearClient, discounts, promoAppl
 };
 
 /* ─── Right cart panel ────────────────────────────────────────────────── */
-const CartPanel = ({ items, discount, promoApplied, onQty, onRemove, onCheckout }) => {
+const CartPanel = ({ items, discount, promoApplied, onQty, onRemove, onCheckout, busy }) => {
   const [method, setMethod] = useState('cash');
+  // Split (cash/card) part — only the cash side is edited; card is the remainder.
+  const [cashPart, setCashPart] = useState('');
 
   const subtotal = items.reduce((s, i) => s + i.price * i.qty, 0);
   const discPct  = discount || (promoApplied?.reward_type === 'discount' ? Number(promoApplied.value) : 0);
+  // NOTE: backend only discounts lines whose item has applies_discount=true (see
+  // shops/api/v1/views/sell.py). It does NOT discount non-discountable items, so on a
+  // mixed cart this displayed total can read slightly LOWER than what's actually
+  // charged. We intentionally do NOT replicate that per-item rule here: the catalog
+  // payload (ProductAdminSerializer) does not expose `applies_discount`, so guessing
+  // it client-side would risk being even more wrong. Backend total is authoritative.
   const discAmt  = Math.round(subtotal * discPct / 100);
   const total    = Math.max(0, subtotal - discAmt);
+
+  // For the split method: cash = entered (clamped to [0,total]); card = the rest.
+  const cashNum  = Math.min(Math.max(parseInt(cashPart, 10) || 0, 0), total);
+  const cardNum  = Math.max(0, total - cashNum);
 
   const METHODS = [
     { id: 'cash',    label: 'Наличные' },
@@ -361,6 +408,19 @@ const CartPanel = ({ items, discount, promoApplied, onQty, onRemove, onCheckout 
     { id: 'balance', label: 'Депозит' },
     { id: 'split',   label: 'Разделить' },
   ];
+
+  const handlePay = () => {
+    if (busy || items.length === 0) return;
+    // BUGFIX: «Разделить» used to send method:'split' with no parts, so the backend
+    // (which only knows cash/card/balance/composite) fell through to CASH and the
+    // whole sale was recorded as cash. Send the documented 'composite' method with
+    // cash_part/card_part so the operator's chosen split is actually submitted.
+    if (method === 'split') {
+      onCheckout('composite', { cash_part: cashNum, card_part: cardNum });
+    } else {
+      onCheckout(method);
+    }
+  };
 
   return (
     <div style={{ width: 240, flexShrink: 0, borderLeft: '1px solid var(--border-color)',
@@ -436,13 +496,41 @@ const CartPanel = ({ items, discount, promoApplied, onQty, onRemove, onCheckout 
           ))}
         </div>
 
+        {/* Split amounts — only for «Разделить». Cash is entered, card is the rest. */}
+        {method === 'split' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: 3 }}>Наличные</div>
+              <input type="number" min={0} max={total} value={cashPart}
+                onChange={e => setCashPart(e.target.value)}
+                placeholder="0"
+                style={{ height: 34, width: '100%', padding: '0 8px', boxSizing: 'border-box',
+                  background: 'var(--bg-dark)', border: '1px solid var(--border-color)',
+                  borderRadius: 8, color: 'var(--text-main)', fontSize: '12px', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginBottom: 3 }}>Карта</div>
+              <div style={{ height: 34, display: 'flex', alignItems: 'center', padding: '0 8px',
+                background: 'var(--bg-dark)', border: '1px solid var(--border-color)',
+                borderRadius: 8, color: 'var(--text-main)', fontSize: '12px' }}>
+                {fmtMoney(cardNum)}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pay button */}
         <button className="btn btn-primary"
           style={{ width: '100%', height: 42, justifyContent: 'center', fontSize: '13px',
-            opacity: items.length === 0 ? 0.4 : 1, cursor: items.length === 0 ? 'not-allowed' : 'pointer' }}
-          disabled={items.length === 0}
-          onClick={() => onCheckout(method)}>
-          Оплатить {items.length > 0 ? fmtMoney(total) : ''}
+            opacity: (items.length === 0 || busy) ? 0.4 : 1,
+            cursor: (items.length === 0 || busy) ? 'not-allowed' : 'pointer' }}
+          // BUGFIX: button was only disabled on empty cart, so a fast double-click
+          // fired two checkouts (duplicate order). The parent also swapped onCheckout
+          // for `undefined` while busy, which made the 2nd click throw a TypeError.
+          // Disable on `busy` here and guard inside handlePay → at most one request.
+          disabled={items.length === 0 || busy}
+          onClick={handlePay}>
+          {busy ? 'Оплата…' : `Оплатить ${items.length > 0 ? fmtMoney(total) : ''}`}
         </button>
       </div>
     </div>
@@ -523,12 +611,15 @@ const Shop = () => {
   const removeItem = (cartId) => setCart(prev => prev.filter(c => c.cartId !== cartId));
 
   /* ── checkout ── */
-  const checkout = async (payMethod) => {
+  const checkout = async (payMethod, extra = {}) => {
     if (cart.length === 0 || checking) return;
     setChecking(true);
 
-    // Effective discount percent (same formula as CartPanel display)
-    const discPct = Number(client?.personal_discount || 0) ||
+    // BUGFIX: was client.personal_discount, which ignored the group discount.
+    // effective_discount = max(personal, group) — matches the backend rule and is
+    // returned on the client object by /billing/admin/users/. Fall back to
+    // personal_discount for older payloads that lack effective_discount.
+    const discPct = Number(client?.effective_discount ?? client?.personal_discount ?? 0) ||
                     (promoApplied?.reward_type === 'discount' ? Number(promoApplied.value) : 0);
 
     try {
@@ -541,6 +632,7 @@ const Shop = () => {
           club: clubId,
           discount_percent: discPct,   // ← передаём скидку бэкенду
           ...(promoApplied?.code ? { promocode_code: promoApplied.code } : {}),
+          ...extra,                    // cash_part/card_part for split (composite)
         }),
       });
       toast('Оплачено успешно', { type: 'success' });
@@ -548,7 +640,9 @@ const Shop = () => {
       setPromoApplied(null);
       load(); // refresh stock quantities
     } catch (e) {
-      toast('Ошибка оплаты: ' + (e.message || 'server error'), { type: 'error' });
+      // BUGFIX: was `e.message` → always the generic "HTTP 400". Surface the real
+      // backend reason (cart empty / not enough stock / insufficient deposit, …).
+      toast('Ошибка оплаты: ' + errMsg(e), { type: 'error' });
     } finally { setChecking(false); }
   };
 
@@ -699,11 +793,15 @@ const Shop = () => {
       {/* ── RIGHT CART ── */}
       <CartPanel
         items={cart}
-        discount={client?.personal_discount || 0}
+        // effective_discount = max(personal, group); falls back to personal for old payloads.
+        discount={client?.effective_discount ?? client?.personal_discount ?? 0}
         promoApplied={promoApplied}
         onQty={updateQty}
         onRemove={removeItem}
-        onCheckout={checking ? undefined : checkout}
+        // Pass a STABLE callback + a `busy` flag instead of swapping onCheckout for
+        // undefined while checking (which made a 2nd click call undefined() → TypeError).
+        onCheckout={checkout}
+        busy={checking}
       />
 
       {/* ── Stock entry modal ── */}

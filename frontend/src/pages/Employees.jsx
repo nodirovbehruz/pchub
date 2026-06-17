@@ -756,7 +756,9 @@ const Employees = () => {
 
                         {/* Статус */}
                         <td>
-                          <StatusBadges isActive={true} />
+                          {/* BUGFIX: was hardcoded isActive={true} for every row;
+                              use the real per-employee active flag. */}
+                          <StatusBadges isActive={emp.is_active !== false} />
                         </td>
 
                         {/* Дата создания */}

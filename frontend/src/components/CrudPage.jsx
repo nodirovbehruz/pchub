@@ -29,7 +29,12 @@ const CrudPage = ({ title, icon: Icon, endpoint, columns, formFields, searchFiel
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const url = tenantParam && clubId ? `${endpoint}?club=${clubId}` : endpoint;
+      // limit=500 overrides the backend default LimitOffsetPagination cap
+      // (PAGE_SIZE=20) so the whole list loads — search/filter is client-side
+      // over the full set. The backend honors `limit`, not `page_size`.
+      const url = tenantParam && clubId
+        ? `${endpoint}?club=${clubId}&limit=500`
+        : `${endpoint}?limit=500`;
       const json = await apiFetch(url);
       setItems(json.results || json || []);
     } catch (e) {
@@ -61,7 +66,16 @@ const CrudPage = ({ title, icon: Icon, endpoint, columns, formFields, searchFiel
     setSaving(true);
     try {
       const isCreate = !editing?.id;
-      const body = JSON.stringify(form);
+      // Drop empty-string optional fields: the backend 400s on '' for
+      // date/datetime (and other typed) fields, which blocked create. Required
+      // fields are kept so the backend can report the missing-value error.
+      const requiredNames = new Set(formFields.filter(f => f.required).map(f => f.name));
+      const payload = {};
+      Object.entries(form).forEach(([k, v]) => {
+        if (v === '' && !requiredNames.has(k)) return;
+        payload[k] = v;
+      });
+      const body = JSON.stringify(payload);
       if (isCreate) {
         await apiFetch(endpoint, { method: 'POST', body });
       } else {

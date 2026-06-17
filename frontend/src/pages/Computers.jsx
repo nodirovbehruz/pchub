@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from 'react';
 import {
   Monitor, RefreshCw, Search, X, Cpu, HardDrive, Wifi, Activity,
   CheckSquare, Square, Power, Send, Circle, Map, List, Plus,
   ChevronRight, Edit2, Trash2, Wrench, Calendar, Clock,
   AlertTriangle, WifiOff, Settings, Bell, Zap, TerminalSquare,
+  Check, // BUGFIX: rendered in TariffModal (selected-tariff checkmark) but was never imported → ReferenceError crash on tariff select
 } from 'lucide-react';
 import { apiFetch } from '../api/client';
 import { useToast } from '../components/Toast';
@@ -526,9 +527,11 @@ const TableView = ({ groups, computers, selectedIds, onToggle, onToggleGroup, on
         </thead>
         <tbody>
           {grouped.map(group => (
-            <>
+            // BUGFIX: the top-level element returned from .map was a keyless <>
+            // Fragment → React reconciliation warning. Give the Fragment the key.
+            <Fragment key={group.id}>
               {/* Group header */}
-              <tr key={`grp-${group.id}`} style={{ background: 'rgba(255,255,255,0.02)',
+              <tr style={{ background: 'rgba(255,255,255,0.02)',
                 borderBottom: '1px solid var(--border-color)' }}>
                 <td colSpan={13} style={{ padding: '6px 16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -612,7 +615,7 @@ const TableView = ({ groups, computers, selectedIds, onToggle, onToggleGroup, on
                   </tr>
                 );
               })}
-            </>
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -1104,6 +1107,10 @@ const Computers = () => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [activeGroup, setActiveGroup] = useState('all');
   const [activePc, setActivePc]   = useState(null);
+  // BUGFIX: `load` is memoized on [clubId], so its closure captures the FIRST
+  // `activePc` (null) and the 15s poll never sees the currently-open panel —
+  // the detail panel went stale. Mirror activePc into a ref the poll reads live.
+  const activePcRef = useRef(null);
   const [menu, setMenu]           = useState(null);   // { pc, x, y }
   const [modal, setModal]         = useState(null);   // { type, pc? }
   const [pcAction, setPcAction]   = useState(null);   // { mode, pc } → PcActionModal
@@ -1123,9 +1130,11 @@ const Computers = () => {
       const grps = grpJson.results || grpJson || [];
       setComputers(pcs);
       setGroups(grps);
-      // keep active pc in sync
-      if (activePc) {
-        const updated = pcs.find(p => p.id === activePc.id);
+      // keep active pc in sync — read the LIVE value from the ref (the closure's
+      // `activePc` is stale because `load` is memoized on [clubId] only).
+      const current = activePcRef.current;
+      if (current) {
+        const updated = pcs.find(p => p.id === current.id);
         if (updated) setActivePc(updated);
       }
     } catch (e) {
@@ -1140,6 +1149,10 @@ const Computers = () => {
     const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
+
+  // Mirror the open panel's PC into a ref so the polled `load` always sees the
+  // currently-selected PC (fixes the stale detail panel).
+  useEffect(() => { activePcRef.current = activePc; }, [activePc]);
 
   /* ─── filter ─── */
   const filtered = useMemo(() => computers.filter(pc => {

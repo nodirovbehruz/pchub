@@ -57,6 +57,11 @@ async function doFetch(url, options, headers) {
 const _cache = new Map();          // key → { ts, data }
 const _inflight = new Map();       // key → Promise (dedupe concurrent GETs)
 const CACHE_TTL = 12_000;          // 12s — long enough for back-and-forth nav
+// BUGFIX: monotonic epoch bumped on every mutation / cache clear. A GET captures
+// the epoch before it starts; if a mutation lands while the GET is in flight the
+// epoch changes, so the GET refuses to repopulate the (now-cleared) cache with
+// its stale pre-mutation snapshot.
+let cacheEpoch = 0;
 
 function _cacheKey(url) {
   // Scope by access token (per-user) + active club so one account/club never
@@ -68,7 +73,7 @@ function _cacheKey(url) {
   return `${tok}|${club}|${url}`;
 }
 
-export function clearApiCache() { _cache.clear(); _inflight.clear(); }
+export function clearApiCache() { _cache.clear(); _inflight.clear(); cacheEpoch++; }
 
 export async function apiFetch(path, options = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
@@ -81,7 +86,11 @@ export async function apiFetch(path, options = {}) {
 
   // Mutations invalidate the whole cache + drop in-flight GETs so a stale
   // pre-mutation response can't be served after the change.
-  if (!isGet) { _cache.clear(); _inflight.clear(); }
+  if (!isGet) { _cache.clear(); _inflight.clear(); cacheEpoch++; }
+
+  // Snapshot the epoch before issuing the GET so we can detect a mutation that
+  // clears the cache while this request is in flight (see _cache.set guard below).
+  const epochAtStart = cacheEpoch;
 
   // Serve fresh-enough GETs straight from cache (deep-cloned to avoid mutation).
   if (useCache) {
@@ -98,7 +107,9 @@ export async function apiFetch(path, options = {}) {
     _inflight.set(key, run.then(d => d).catch(e => { throw e; }));
     try {
       const data = await run;
-      _cache.set(key, { ts: Date.now(), data });
+      // BUGFIX: only repopulate the cache if no mutation cleared it while this GET
+      // was in flight — otherwise we'd serve a stale pre-mutation snapshot.
+      if (cacheEpoch === epochAtStart) _cache.set(key, { ts: Date.now(), data });
       return data;
     } finally {
       _inflight.delete(key);

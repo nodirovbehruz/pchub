@@ -457,8 +457,11 @@ const InstallToPcsModal = ({ game, onClose }) => {
                 <Monitor size={14} color="var(--text-muted)" />
                 {pc.name || `ПК-${pc.pc_number || pc.id}`}
                 <span style={{ marginLeft: 'auto', fontSize: '11px',
-                  color: pc.online || pc.status === 'online' ? '#22c55e' : 'var(--text-muted)' }}>
-                  {pc.online || pc.status === 'online' ? 'в сети' : 'офлайн'}
+                  /* BUGFIX: /computers/ returns status as uppercase 'ONLINE', so the
+                     lowercase 'online' check never matched → always «офлайн».
+                     Compare case-insensitively, as elsewhere in the app. */
+                  color: pc.online || String(pc.status).toUpperCase() === 'ONLINE' ? '#22c55e' : 'var(--text-muted)' }}>
+                  {pc.online || String(pc.status).toUpperCase() === 'ONLINE' ? 'в сети' : 'офлайн'}
                 </span>
               </label>
             ))}

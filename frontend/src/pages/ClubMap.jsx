@@ -160,7 +160,10 @@ const ClubMap = () => {
     try {
       await apiFetch(`/api/v1/computers/${pc.id}/position/`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: newStatus }),
+        // BUGFIX: backend ComputerStatus choices are UPPERCASE; sending the
+        // normalized lowercase status failed validation ("invalid status") → 400,
+        // so maintenance toggle always errored. Send the canonical uppercase value.
+        body: JSON.stringify({ status: newStatus.toUpperCase() }),
       });
       toast(`ПК-${pc.alias}: ${newStatus === 'maintenance' ? '🔧 Обслуживание' : '✅ Офлайн'}`, { type: 'info' });
     } catch (e) {

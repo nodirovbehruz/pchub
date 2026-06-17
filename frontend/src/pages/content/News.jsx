@@ -24,7 +24,15 @@ const fmtDateTime = (iso) => {
 };
 const toDateInput = (iso) => {
   if (!iso) return '';
-  try { return new Date(iso).toISOString().slice(0, 16); }
+  try {
+    // BUGFIX: a datetime-local input expects LOCAL wall-clock time. Using
+    // toISOString() here returned UTC, then save re-parsed that string as local
+    // and shifted it again (double timezone drift). Build a local-time string so
+    // the input ↔ save round-trip is consistent.
+    const d = new Date(iso);
+    const off = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - off).toISOString().slice(0, 16);
+  }
   catch { return ''; }
 };
 
@@ -104,6 +112,13 @@ const NewsForm = ({ item, clubId, onClose, onSaved }) => {
   const [coverPreview, setCoverPreview] = useState(item?.cover_image_url || null);
   const [saving, setSaving]         = useState(false);
 
+  // BUGFIX: track the blob URL we create for the cover preview so it can be
+  // revoked when replaced or on unmount (previously leaked an object URL each pick).
+  const blobUrlRef = useRef(null);
+  useEffect(() => () => {
+    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+  }, []);
+
   /* format helpers for body textarea */
   const wrapSelection = (tag) => {
     const ta = bodyRef.current;
@@ -125,7 +140,11 @@ const NewsForm = ({ item, clubId, onClose, onSaved }) => {
     if (!file) return;
     if (file.size > 640 * 1024) { toast('Файл > 640 КБ', { type: 'warning' }); return; }
     setCoverFile(file);
-    setCoverPreview(URL.createObjectURL(file));
+    // Revoke any previously created blob URL before replacing the preview.
+    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current);
+    const url = URL.createObjectURL(file);
+    blobUrlRef.current = url;
+    setCoverPreview(url);
   };
 
   const save = async () => {
@@ -137,7 +156,10 @@ const NewsForm = ({ item, clubId, onClose, onSaved }) => {
       fd.append('title', title.trim());
       fd.append('body', body);
       fd.append('button_text', btnEnabled ? btnText : '');
-      if (btnEnabled && btnUrl) fd.append('button_url', btnUrl);
+      // BUGFIX: when the button is disabled, button_text was cleared but button_url
+      // was omitted from the payload — leaving a stale URL in the DB on PATCH.
+      // Always send button_url so it is cleared when the button is off.
+      fd.append('button_url', btnEnabled ? btnUrl : '');
       fd.append('is_published', published ? 'true' : 'false');
       // DateTimeField: omit entirely when empty (DRF rejects empty strings)
       if (periodEnabled && showFrom)  fd.append('show_from',  new Date(showFrom).toISOString());
@@ -571,15 +593,13 @@ const News = () => {
                       ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                     </td>
 
-                    {/* Body (2 lines) */}
+                    {/* Body */}
                     <td style={{ padding: '8px 12px', maxWidth: 320 }}>
-                      <div style={{ fontWeight: 600, fontSize: '12px', overflow: 'hidden',
-                        textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {n.title}
-                      </div>
-                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 2,
+                      {/* BUGFIX: this "Текст новости" column showed n.title (already
+                          shown in its own column). Show the news body instead. */}
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)',
                         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {n.body?.replace(/<[^>]+>/g, '') || ''}
+                        {n.body?.replace(/<[^>]+>/g, '') || '—'}
                       </div>
                     </td>
 

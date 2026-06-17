@@ -372,7 +372,10 @@ const PcActionModal = ({ mode, pc, isOpen, onClose, onDone }) => {
                 <option value="">— выберите ПК —</option>
                 {computers.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.name} {(c.status === 'online') ? '(занят)' : '(свободен)'}
+                    {/* BUGFIX: list is loaded raw (un-normalized), so c.status is the
+                        backend's UPPERCASE value ('ONLINE'). Comparing to lowercase
+                        'online' never matched → every PC showed «(свободен)». */}
+                    {c.name} {(String(c.status).toLowerCase() === 'online') ? '(занят)' : '(свободен)'}
                   </option>
                 ))}
               </select>

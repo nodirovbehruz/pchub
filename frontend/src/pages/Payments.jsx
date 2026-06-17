@@ -57,9 +57,15 @@ const cleanNote = (note = '') =>
     .replace(/\[СКИДКА\s*[\d.]+%\]/, '').trim() || '—';
 
 /* CSV export */
+// BUGFIX: escape every field so embedded ; " or newlines can't break columns/rows.
+// Quote when the value contains a separator/quote/newline, and double any inner quotes (RFC 4180).
+const csvCell = (v) => {
+  const s = String(v ?? '');
+  return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 const exportCSV = (rows) => {
   const headers = ['ID', 'Дата', 'Клиент', 'Способ', 'Категория', 'Сумма', 'Статус', 'Примечание'];
-  const lines = [headers.join(';'),
+  const lines = [headers.map(csvCell).join(';'),
     ...rows.map(p => [
       p.id,
       fmtDateTime(p.created_at),
@@ -68,8 +74,8 @@ const exportCSV = (rows) => {
       getCategory(p).label,
       Number(p.amount_paid || 0).toFixed(2),
       isRefunded(p) ? 'ВОЗВРАТ' : 'АКТИВЕН',
-      `"${cleanNote(p.note)}"`,
-    ].join(';'))
+      cleanNote(p.note),
+    ].map(csvCell).join(';'))
   ];
   const bom = '﻿';
   const blob = new Blob([bom + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -202,9 +208,12 @@ const Payments = () => {
 
   const clubId = localStorage.getItem('active_club_id');
 
-  const load = useCallback(async () => {
-    if (!clubId) return;
-    setLoading(true);
+  const load = useCallback(async (silent = false) => {
+    // BUGFIX: clear loading in the no-club guard so the page doesn't hang on "Загрузка…" forever.
+    if (!clubId) { setLoading(false); return; }
+    // BUGFIX: only show the full-page spinner on the first load; the 15s interval
+    // refreshes pass silent=true so the table doesn't flash on every poll.
+    if (!silent) setLoading(true);
     try {
       const [paymentsJson, cashJson, shiftJson] = await Promise.all([
         apiFetch(`/api/v1/billing/admin/payments/?club=${clubId}`).catch(() => []),
@@ -220,7 +229,7 @@ const Payments = () => {
     }
   }, [clubId]);
 
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { load(); const t = setInterval(() => load(true), 15000); return () => clearInterval(t); }, [load]);
 
   /* ── Filters ── */
   const CATEGORIES = [

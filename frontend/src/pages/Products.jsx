@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Package, Plus, X, Search, RefreshCw,
   Download, Minus, Eye, EyeOff, Edit2, Trash2,
@@ -139,12 +139,24 @@ const ProductModal = ({ product, categories, clubId, onClose, onSaved }) => {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
+  // Track the current object URL so we can revoke it (avoids a memory leak when
+  // the user picks several files in a row or closes the modal).
+  const objectUrlRef = useRef(null);
+
   const onPickImage = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+    const url = URL.createObjectURL(file);
+    objectUrlRef.current = url;
     setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    setImagePreview(url);
   };
+
+  // Revoke any outstanding object URL on unmount.
+  useEffect(() => () => {
+    if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
+  }, []);
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast('Введите название', { type: 'warning' }); return; }
@@ -162,8 +174,11 @@ const ProductModal = ({ product, categories, clubId, onClose, onSaved }) => {
         is_active: !!form.is_active,
         club: clubId ? Number(clubId) : null,
       };
-      if (form.purchase_price) fields.purchase_price = Number(form.purchase_price);
-      if (form.original_price) fields.original_price = Number(form.original_price);
+      // Send optional prices explicitly: a non-empty value as a number, an
+      // emptied field as null (was `if (form.x)` which silently kept the old
+      // value when the user cleared the field while editing).
+      fields.purchase_price = form.purchase_price === '' ? null : Number(form.purchase_price);
+      fields.original_price = form.original_price === '' ? null : Number(form.original_price);
 
       // If a photo file was picked, send multipart/form-data (main_image is an
       // ImageField) — apiFetch detects FormData and sets the right headers.
@@ -454,12 +469,15 @@ const Products = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // limit=500 overrides the backend's default LimitOffsetPagination cap
+      // (PAGE_SIZE=20) so the full catalogue loads — counts/totals must be
+      // complete. The backend honors `limit`, not `page_size`.
       const url = clubId
-        ? `/api/v1/shops/admin/products/?club=${clubId}`
-        : '/api/v1/shops/admin/products/';
+        ? `/api/v1/shops/admin/products/?club=${clubId}&limit=500`
+        : '/api/v1/shops/admin/products/?limit=500';
       const [prods, cats] = await Promise.all([
         apiFetch(url).catch(() => []),
-        apiFetch('/api/v1/shops/categories/').catch(() => []),
+        apiFetch('/api/v1/shops/categories/?limit=500').catch(() => []),
       ]);
       setProducts(prods.results || prods || []);
       setCategories(cats.results || cats || []);
@@ -472,7 +490,8 @@ const Products = () => {
   const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
 
   const filtered = products.filter(p => {
-    const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+    // Guard against products with no name (p.name.toLowerCase() would throw).
+    const matchSearch = !search || (p.name || '').toLowerCase().includes(search.toLowerCase());
     const matchCat = !filterCat || String(p.category) === String(filterCat);
     return matchSearch && matchCat;
   });

@@ -94,6 +94,7 @@ const DAYS = [
 const DEFAULT_DAY = { open: '10:00', close: '23:00', closed: false };
 
 const ClubTab = ({ club, onChange, s, upd }) => {
+  const { toast } = useToast(); // BUGFIX: token-regenerate handler called undefined `toast` → ReferenceError crash
   const schedule = s.work_schedule || {};
   const equipment = s.equipment_list || [];
   const services  = s.club_services  || [];
