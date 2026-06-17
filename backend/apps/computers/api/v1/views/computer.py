@@ -507,10 +507,12 @@ class ComputerHighAccessAPIView(APIView):
             enabled = bool(_raw)
 
         # Pass the club's high-access password so the shell can apply it if needed.
+        # get_or_create: the ShellSecurity row was never auto-created, so this sent an
+        # EMPTY password instead of the model default ("pasw0rd") → high-access unusable.
         password = ""
         try:
             from apps.integrations.models.shell_security import ShellSecurity
-            sec = ShellSecurity.objects.filter(club_id=pc.club_id).first()
+            sec, _ = ShellSecurity.objects.get_or_create(club_id=pc.club_id)
             if sec:
                 password = sec.high_access_password or ""
         except Exception:
