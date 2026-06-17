@@ -64,6 +64,15 @@ class CategoryDeleteService(ICategoryDeleteService):
         if not category:
             raise ValidationError(f"Category with slug '{slug}' not found")
 
+        # Refuse to delete a non-empty category — Product.category is on_delete=CASCADE,
+        # so deleting it would silently DELETE every product in it (and their stock/cart/
+        # order items). Force the operator to move/remove the products first.
+        product_count = category.products.count()
+        if product_count:
+            raise ValidationError(
+                f"Нельзя удалить категорию: в ней {product_count} товаров. "
+                f"Сначала перенесите или удалите товары.")
+
         category.delete()
 
 
