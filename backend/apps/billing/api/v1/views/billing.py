@@ -98,9 +98,12 @@ class UserListWithBalanceAPIView(APIView):
                 "phone": str(getattr(u, "phone", None) or "") if getattr(u, "phone", None) else "",
                 "email": u.email or "",
                 "full_name": f"{u.first_name} {u.last_name}".strip() or "",
-                "minutes_remaining": bal.minutes_remaining if bal else 0,
-                "formatted_time": bal.formatted_time if bal else "0ч 0м",
-                "is_active": (bal.is_active if bal else False),
+                # Per-club time (UserClubProfile), NOT the legacy GLOBAL UserBalance — the
+                # admin was shown the client's global minutes/active flag instead of THIS
+                # club's, so remaining time in the Clients table was wrong per club.
+                "minutes_remaining": (profile or bal).minutes_remaining if (profile or bal) else 0,
+                "formatted_time": (profile or bal).formatted_time if (profile or bal) else "0ч 0м",
+                "is_active": ((profile or bal).is_active if (profile or bal) else False),
                 "deposit_money": str(deposit_val or 0),
                 "bonus_balance": str(bonus_val or 0),
                 # Per-club profile fields
