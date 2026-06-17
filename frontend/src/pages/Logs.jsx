@@ -70,25 +70,41 @@ const Logs = () => {
     if (!clubId) { setLoading(false); return; }
     setLoading(true);
     try {
-      let url = `/api/v1/billing/logs/?club=${clubId}&limit=500`;
-      if (search) url += `&q=${encodeURIComponent(search)}`;
+      // NOTE(#4): the backend `q` param only matches OperationLog.object_repr
+      // (icontains). Operator name (subject_username) and the action label are
+      // NOT searched server-side — that needs a backend change to extend the
+      // queryset filter. We DON'T send `q` here so the server returns the full
+      // recent window; search is applied client-side below where we CAN also
+      // match the operator and the human action label.
+      const url = `/api/v1/billing/logs/?club=${clubId}&limit=500`;
       const data = await apiFetch(url).catch(() => []);
       setLogs(data.results || data || []);
       setPage(1);
     } finally {
       setLoading(false);
     }
-  }, [clubId, search]);
+  }, [clubId]);
 
-  useEffect(() => {
-    const t = setTimeout(load, 300);
-    return () => clearTimeout(t);
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
-  // Client-side group filter
-  const filtered = groupFilter
-    ? logs.filter(l => getActionCfg(l.action).group === groupFilter)
-    : logs;
+  // Reset paging whenever the search text changes (load() only reruns on club).
+  useEffect(() => { setPage(1); }, [search]);
+
+  // Client-side filtering. IMPORTANT LIMITATION(#4): the group filter and search
+  // run only over the newest 500 rows the server returned — older matches are not
+  // found. True full-history search/filter requires server-side support (extend
+  // `q` to cover subject/action, and add group→action filtering on the backend).
+  const q = search.trim().toLowerCase();
+  const filtered = logs.filter(l => {
+    if (groupFilter && getActionCfg(l.action).group !== groupFilter) return false;
+    if (!q) return true;
+    // Search across object, operator (subject_username) and the action label —
+    // the operator match is what the server `q` can't do, so we do it here.
+    const hay = [
+      l.object_repr, l.object_type, l.subject_username, getActionCfg(l.action).label,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.includes(q);
+  });
   const visible = filtered.slice(0, page * PAGE_SIZE);
   const hasMore = visible.length < filtered.length;
 

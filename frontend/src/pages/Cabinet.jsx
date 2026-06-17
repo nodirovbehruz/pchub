@@ -249,7 +249,9 @@ const Cabinet = ({ onClubSwitch, onNavigate }) => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiFetch('/api/v1/clubs/my/');
+      // BUGFIX(#2): default DRF pagination caps at 20 — clubs beyond the 20th
+      // never rendered. Raise the limit so the whole network is returned.
+      const data = await apiFetch('/api/v1/clubs/my/?limit=500');
       const list = data.results || data || [];
       setClubs(list);
 
@@ -379,9 +381,13 @@ const Cabinet = ({ onClubSwitch, onNavigate }) => {
         <AddClubModal
           onClose={() => setShowAddClub(false)}
           onCreated={(club) => {
-            setClubs(prev => [...prev, club]);
             setShowAddClub(false);
             toast(`Клуб «${club.name}» создан!`, { type: 'success' });
+            // BUGFIX(#1): the create response lacks server-computed fields
+            // (created_at, is_trial, stats), so the freshly-pushed card rendered
+            // blank id/date/stats until a manual refresh. Re-fetch the full list
+            // (and per-club stats) so the new card is complete immediately.
+            load();
           }}
         />
       )}

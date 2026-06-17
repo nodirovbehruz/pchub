@@ -34,10 +34,25 @@ const Tog = ({ value, onChange, label }) => (
   </div>
 );
 
-const Num = ({ value, onChange, placeholder, min = 0, style = {} }) => (
-  <Inp type="number" value={value} onChange={onChange} placeholder={placeholder}
-    min={min} style={{ width: '100px', ...style }} />
-);
+// BUGFIX(#5): when `max` is given, clamp the entered value into [min, max] on
+// change. The `min`/`max` HTML attributes alone DON'T stop a user typing 250 into
+// a percent field — the out-of-range value still reaches state and gets saved
+// (e.g. bonus_writeoff_pct=250). Clamping here hard-bounds it in the UI.
+const Num = ({ value, onChange, placeholder, min = 0, max, style = {} }) => {
+  const handle = (e) => {
+    if (max === undefined) { onChange(e); return; }
+    const raw = e.target.value;
+    if (raw === '') { onChange(e); return; } // allow clearing the field
+    let n = Number(raw);
+    if (Number.isNaN(n)) return;             // ignore non-numeric junk
+    n = Math.max(min, Math.min(max, n));
+    onChange({ ...e, target: { ...e.target, value: String(n) } });
+  };
+  return (
+    <Inp type="number" value={value} onChange={handle} placeholder={placeholder}
+      min={min} max={max} style={{ width: '100px', ...style }} />
+  );
+};
 
 const Row = ({ label, hint, children, last }) => (
   <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '16px',
@@ -551,7 +566,7 @@ const PanelTab = ({ s, upd }) => {
           <Tog value={s.bonus_pay_tariffs} onChange={v => upd('bonus_pay_tariffs', v)} label="Включено" />
         </Row>
         <Row label="Процент списания бонусов" hint="Максимальная доля оплаты бонусами (%)">
-          <Num value={s.bonus_writeoff_pct} onChange={e => upd('bonus_writeoff_pct', e.target.value)} placeholder="50" min={0} />
+          <Num value={s.bonus_writeoff_pct} onChange={e => upd('bonus_writeoff_pct', e.target.value)} placeholder="50" min={0} max={100} />
           <span style={{ marginLeft: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>%</span>
         </Row>
         <Row label="Автоприменение персональной скидки" last>
@@ -1128,7 +1143,7 @@ const SmartGamerTab = ({ s, upd }) => (
         <Num value={s.booking_free_cancel_hours} onChange={e => upd('booking_free_cancel_hours', e.target.value)} placeholder="5" />
       </Row>
       <Row label="Штраф за позднюю отмену (%)">
-        <Num value={s.booking_late_cancel_pct} onChange={e => upd('booking_late_cancel_pct', e.target.value)} placeholder="10" />
+        <Num value={s.booking_late_cancel_pct} onChange={e => upd('booking_late_cancel_pct', e.target.value)} placeholder="10" min={0} max={100} />
         <span style={{ marginLeft: '6px', fontSize: '13px', color: 'var(--text-muted)' }}>%</span>
       </Row>
       <Row label="Показывать заполненность">
@@ -1414,6 +1429,9 @@ const SettingsPage = () => {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // BUGFIX(#5): track unsaved edits so we can warn before the tab/page is closed
+  // or reloaded (e.g. switching clubs triggers window.location.reload()).
+  const [dirty, setDirty] = useState(false);
 
   const clubId = localStorage.getItem('active_club_id');
 
@@ -1444,6 +1462,7 @@ const SettingsPage = () => {
       if (settingsData?.data) {
         setSettings(prev => ({ ...prev, ...settingsData.data }));
       }
+      setDirty(false); // freshly loaded state matches the server
     } finally {
       setLoading(false);
     }
@@ -1451,8 +1470,16 @@ const SettingsPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const updateClub = (key, val) => setClub(p => ({ ...p, [key]: val }));
-  const updateSettings = (key, val) => setSettings(p => ({ ...p, [key]: val }));
+  // Warn before leaving with unsaved changes (close tab / reload / club switch).
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  const updateClub = (key, val) => { setDirty(true); setClub(p => ({ ...p, [key]: val })); };
+  const updateSettings = (key, val) => { setDirty(true); setSettings(p => ({ ...p, [key]: val })); };
 
   const save = async () => {
     if (!clubId) { toast('Клуб не выбран', { type: 'warning' }); return; }
@@ -1480,6 +1507,7 @@ const SettingsPage = () => {
           body: JSON.stringify({ data: { ...settings, contact_email: club.email } }),
         }),
       ]);
+      setDirty(false); // saved — drop the unsaved-changes guard
       toast('Настройки сохранены', { type: 'success' });
     } catch (e) {
       const msg = e.body ? Object.values(e.body).flat().join(', ') : e.message;

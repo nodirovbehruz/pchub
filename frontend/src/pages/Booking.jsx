@@ -35,10 +35,8 @@ const dateInputStr = (d) => {
   return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
 };
 
-const minutesFromMidnight = (iso) => {
-  const d = new Date(iso);
-  return d.getHours() * 60 + d.getMinutes();
-};
+// (minutesFromMidnight removed — the Gantt now clamps blocks to the selected day's
+//  window using real instants, so wall-clock-minute positioning is no longer needed.)
 
 const durationHours = (from, to) => {
   if (!from || !to) return 0;
@@ -152,7 +150,11 @@ const BookingModal = ({ mode, booking, bookings, pcs, clubId, onClose, onSaved }
     pcs.forEach(pc => {
       const conflict = bookings.filter(b =>
         b.id !== booking?.id &&
-        b.status === 'active' &&
+        // BUGFIX: REDEEMED bookings (client arrived, slot still held) also block the
+        // PC server-side — the backend overlap check rejects ACTIVE *and* REDEEMED.
+        // Only matching 'active' here marked a redeemed slot "Свободен", so the
+        // operator could pick it and the POST/PATCH then failed with a 400.
+        (b.status === 'active' || b.status === 'redeemed') &&
         b.hosts?.includes(pc.id) &&
         fromDt && toDt &&
         new Date(b.from_at) < toDt &&
@@ -404,7 +406,12 @@ const BookingModal = ({ mode, booking, bookings, pcs, clubId, onClose, onSaved }
 const GanttTimeline = ({ pcs, bookings, selectedDate, onEdit, onCreateAt }) => {
   const scrollRef = useRef();
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
+  // BUGFIX: use the LOCAL date, not the UTC ISO prefix. selectedDate is built with
+  // toLocaleDateString('sv-SE') (local), and the current-time line below is placed
+  // from now.getHours()/getMinutes() (local). Mixing a UTC date prefix here made
+  // isToday flip near midnight (e.g. UTC+5 after 19:00 local → "tomorrow" in UTC),
+  // so the time line vanished or showed on the wrong day.
+  const todayStr = now.toLocaleDateString('sv-SE'); // YYYY-MM-DD local
   const isToday = selectedDate === todayStr;
   const currentMinute = now.getHours() * 60 + now.getMinutes();
   const currentX = (currentMinute / 30) * SLOT_W;
@@ -428,17 +435,24 @@ const GanttTimeline = ({ pcs, bookings, selectedDate, onEdit, onCreateAt }) => {
     return groups;
   }, [pcs]);
 
-  // Filter bookings for selected date (exclude canceled — slot should appear free)
+  // [00:00, 24:00) of the selected LOCAL day — the window the grid represents.
+  const dayStart = useMemo(() => new Date(`${selectedDate}T00:00:00`), [selectedDate]);
+  const dayEnd = useMemo(() => new Date(dayStart.getTime() + 1440 * 60_000), [dayStart]);
+
+  // Filter bookings for selected date (exclude canceled — slot should appear free).
+  // BUGFIX: a booking that crosses midnight (e.g. 22:00 → 02:00) belongs to BOTH the
+  // start day and the next day. The old filter keyed only on from_at's local date, so
+  // the after-midnight tail vanished on the next day. Include any booking whose window
+  // overlaps [dayStart, dayEnd); the render clamps it to the grid (see below).
   const dayBookings = useMemo(() => {
     return bookings.filter(b => {
-      // BUGFIX: compare the booking's LOCAL date, not its UTC date prefix — block
-      // positioning uses local getHours(), so a UTC-date bucket put 23:00-local
-      // bookings (UTC+5 → previous UTC day) in the wrong column / made them vanish.
-      if (!b.from_at) return false;
-      const d = new Date(b.from_at).toLocaleDateString('sv-SE'); // YYYY-MM-DD local
-      return d === selectedDate && b.status !== 'canceled';
+      if (!b.from_at || !b.to_at) return false;
+      if (b.status === 'canceled') return false;
+      const f = new Date(b.from_at);
+      const t = new Date(b.to_at);
+      return f < dayEnd && t > dayStart; // overlaps the selected local day
     });
-  }, [bookings, selectedDate]);
+  }, [bookings, dayStart, dayEnd]);
 
   const getBookingsForPc = (pcId) =>
     dayBookings.filter(b => b.hosts?.includes(pcId));
@@ -526,11 +540,21 @@ const GanttTimeline = ({ pcs, bookings, selectedDate, onEdit, onCreateAt }) => {
 
                       {/* Booking blocks */}
                       {pcBookings.map(b => {
-                        const fromMin = minutesFromMidnight(b.from_at);
-                        const toMin = minutesFromMidnight(b.to_at);
-                        const dur = toMin > fromMin ? toMin - fromMin : 1440 - fromMin + toMin;
+                        // BUGFIX: position from the booking's real instants CLAMPED to the
+                        // selected day's [00:00, 24:00) window. The old wall-clock-minutes
+                        // math made a midnight-crossing block overflow the grid on its start
+                        // day, and (combined with the from_at-only filter) hid the tail on the
+                        // next day. Clamping draws the correct partial bar on each day.
+                        const f = new Date(b.from_at);
+                        const t = new Date(b.to_at);
+                        const startMs = Math.max(f.getTime(), dayStart.getTime());
+                        const endMs = Math.min(t.getTime(), dayEnd.getTime());
+                        const fromMin = (startMs - dayStart.getTime()) / 60_000;
+                        const dur = Math.max(0, (endMs - startMs) / 60_000);
                         const left = (fromMin / 30) * SLOT_W;
-                        const width = Math.max((dur / 30) * SLOT_W - 4, 20);
+                        // Keep the bar inside the grid width even after the -4 inset.
+                        const maxWidth = SLOTS * SLOT_W - left - 4;
+                        const width = Math.max(Math.min((dur / 30) * SLOT_W - 4, maxWidth), 20);
                         const isGuest = !b.client_username && b.guest_name;
                         const col = b.status === 'canceled' ? BOOKING_COLORS.canceled
                           : b.status === 'finished' ? BOOKING_COLORS.finished
@@ -632,8 +656,13 @@ const Booking = () => {
     [pcs, zoneFilter]);
 
   const activeBookings = bookings.filter(b => b.status === 'active');
+  // BUGFIX: compare the booking's LOCAL date, not its UTC ISO prefix. slice(0,10) on
+  // from_at takes the UTC date, which mismatches selectedDate (local) near midnight,
+  // so the "Сегодня" count dropped/added bookings vs. what the Gantt actually shows.
   const todayBookings = bookings.filter(b =>
-    b.from_at?.slice(0, 10) === selectedDate && b.status !== 'canceled');
+    b.from_at &&
+    new Date(b.from_at).toLocaleDateString('sv-SE') === selectedDate &&
+    b.status !== 'canceled');
 
   return (
     <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>

@@ -15,7 +15,13 @@ const PAY_METHODS = [
   { id: 'transfer', label: 'Перевод' },
   { id: 'deposit', label: 'Депозит' },
 ];
-const fmtTime = (s) => s ? new Date(s).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+// Show date + time so orders are unambiguous in the «Все» tab (was HH:MM only).
+const fmtTime = (s) => s ? new Date(s).toLocaleString('ru-RU', {
+  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+}) : '';
+// Format Decimal amounts as money: thousands separators + «сум» (was raw "15000.00").
+const fmtMoney = (v) =>
+  v == null || v === '' ? '—' : Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' сум';
 
 const StatusBadge = ({ status }) => {
   const c = STATUS_CFG[status] || STATUS_CFG.PENDING;
@@ -54,7 +60,7 @@ const PayModal = ({ order, onClose, onPaid }) => {
           Заказ #{order.id} · {order.computer_name || '—'} · {order.items_summary}
         </div>
         <div style={{ fontSize: 26, fontWeight: 800, color: '#10b981', marginBottom: 18 }}>
-          {order.total_price} сум
+          {fmtMoney(order.total_price)}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Способ оплаты</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 22 }}>
@@ -70,7 +76,7 @@ const PayModal = ({ order, onClose, onPaid }) => {
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-secondary" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose} disabled={busy}>Отмена</button>
           <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={submit} disabled={busy}>
-            {busy ? 'Приём…' : `Принять ${order.total_price} сум`}
+            {busy ? 'Приём…' : `Принять ${fmtMoney(order.total_price)}`}
           </button>
         </div>
       </div>
@@ -99,14 +105,14 @@ const OrderCard = ({ order, onPay, onStatus }) => {
         {(order.items || []).map(it => (
           <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
             <span>{it.product_name} × {it.quantity}</span>
-            <span style={{ color: 'var(--text-muted)' }}>{it.subtotal} сум</span>
+            <span style={{ color: 'var(--text-muted)' }}>{fmtMoney(it.subtotal)}</span>
           </div>
         ))}
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         borderTop: '1px solid var(--border-color)', paddingTop: 10 }}>
-        <div style={{ fontWeight: 700, fontSize: 15 }}>{order.total_price} сум</div>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>{fmtMoney(order.total_price)}</div>
         <div style={{ display: 'flex', gap: 8 }}>
           {order.status === 'PENDING' && (
             <>

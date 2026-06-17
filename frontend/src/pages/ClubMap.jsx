@@ -28,7 +28,10 @@ const STATUS_STYLE = (pc) => {
   if (pc?.status === 'maintenance') {
     return { border: '#cc6600', bg: 'rgba(204,102,0,0.18)', text: '#fbbf24', accent: '#f59e0b' };
   }
-  if (pc?.status === 'shell_down' || pc?.status === 'no_link') {
+  // BUGFIX: DISABLED (backend ComputerStatus, lowercased by norm() → 'disabled') had
+  // no distinct style and fell through to the gray "offline" default — operators
+  // couldn't tell a disabled/«нет связи» PC apart. Render it red like shell_down.
+  if (pc?.status === 'shell_down' || pc?.status === 'no_link' || pc?.status === 'disabled') {
     return { border: '#dc2626', bg: 'rgba(220,38,38,0.15)', text: '#ef4444', accent: '#ef4444' };
   }
   return { border: 'rgba(255,255,255,0.08)', bg: 'rgba(20,24,35,0.5)', text: 'rgba(255,255,255,0.55)', accent: 'rgba(255,255,255,0.3)' };
@@ -64,7 +67,8 @@ const PcTile = ({ pc, selected, onClick, onContextMenu, onDoubleClick, techMode,
         <Move size={14} color="rgba(255,255,255,0.4)" />
       ) : isMaint ? (
         <AlertTriangle size={16} color={accent} />
-      ) : pc?.status === 'shell_down' || pc?.status === 'no_link' ? (
+      ) : pc?.status === 'shell_down' || pc?.status === 'no_link' || pc?.status === 'disabled' ? (
+        // BUGFIX: DISABLED PCs now show the red «нет связи» X icon (was the gray Power icon).
         <XIcon size={16} color={accent} />
       ) : (
         <Power size={16} color={accent} style={{ opacity: isOnline ? 1 : 0.5 }} />

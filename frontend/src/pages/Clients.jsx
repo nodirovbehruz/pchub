@@ -339,9 +339,44 @@ const ClosePostpaidModal = ({ client, onClose, onSuccess }) => {
   const { toast } = useToast();
   const [payMethod, setPayMethod] = useState('cash');
   const [loading,   setLoading]   = useState(false);
+  // BUGFIX(#3): the postpaid quote keeps accruing while the session is open, but
+  // the row object is a snapshot from the last list load, so the modal showed a
+  // stale (too-low) amount. Re-fetch an authoritative live quote on open — the
+  // users endpoint recomputes elapsed wall-clock minutes server-side. Start from
+  // the snapshot so figures show instantly, then replace with the fresh quote.
+  const [quote, setQuote]   = useState({
+    minutes: client.postpaid_minutes || 0,
+    amount_due: client.postpaid_amount_due || 0,
+    rate: client.postpaid_rate,
+  });
+  const [quoting, setQuoting] = useState(false);
 
-  const mins   = client.postpaid_minutes || 0;
-  const amount = parseFloat(client.postpaid_amount_due || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
+  useEffect(() => {
+    let cancelled = false;
+    setQuoting(true);
+    const clubId = localStorage.getItem('active_club_id');
+    // noCache: avoid serving a ≤12s stale snapshot for a live, ticking quote.
+    apiFetch(`/api/v1/billing/admin/users/?club=${clubId}&search=${encodeURIComponent(client.username || '')}`,
+      { noCache: true })
+      .then(d => {
+        if (cancelled) return;
+        const list = d.results || d || [];
+        const fresh = list.find(c => String(c.id) === String(client.id));
+        if (fresh) {
+          setQuote({
+            minutes: fresh.postpaid_minutes || 0,
+            amount_due: fresh.postpaid_amount_due || 0,
+            rate: fresh.postpaid_rate,
+          });
+        }
+      })
+      .catch(() => {}) // keep the snapshot fallback on failure
+      .finally(() => { if (!cancelled) setQuoting(false); });
+    return () => { cancelled = true; };
+  }, [client.id, client.username]);
+
+  const mins   = quote.minutes || 0;
+  const amount = parseFloat(quote.amount_due || 0).toLocaleString('ru-RU', { minimumFractionDigits: 2 });
 
   const handleClose = async () => {
     setLoading(true);
@@ -386,10 +421,10 @@ const ClosePostpaidModal = ({ client, onClose, onSuccess }) => {
             {fmtPostpaid(mins)}
           </div>
           <div style={{ fontSize:'22px', fontWeight:700, color:'#f59e0b' }}>
-            {amount} сум
+            {amount} сум {quoting && <span style={{ fontSize:'11px', fontWeight:400, color:'var(--text-muted)' }}>(обновление…)</span>}
           </div>
           <div style={{ fontSize:'11px', color:'var(--text-muted)', marginTop:'4px' }}>
-            {client.postpaid_rate} сум/ч × {mins} мин
+            {quote.rate} сум/ч × {mins} мин
           </div>
         </div>
 
@@ -511,10 +546,13 @@ const ClientProfileModal = ({ client, clubId, groups, onClose, onSuccess, onDepo
 
   const saveProfile = async (patch) => {
     try {
-      await apiFetch(`/api/v1/billing/admin/users/${client.id}/profile/?club=${clubId}`, {
+      // The backend clamps personal_discount to 0..100 and returns the stored
+      // value — return it so callers can resync their input to the saved figure.
+      const res = await apiFetch(`/api/v1/billing/admin/users/${client.id}/profile/?club=${clubId}`, {
         method: 'PATCH', body: JSON.stringify({ ...patch, club: clubId }),
       });
       onSuccess();
+      return res;
     } catch (e) { toast('Ошибка сохранения', { type: 'error' }); }
   };
 
@@ -644,7 +682,16 @@ const ClientProfileModal = ({ client, clubId, groups, onClose, onSuccess, onDepo
                   <input type="number" min="0" max="100" value={discount} disabled={!editingDisc}
                     onChange={e => setDiscount(e.target.value)} style={{ ...fld, opacity: editingDisc ? 1 : 0.7 }} />
                   <button className="icon-btn" style={{ flexShrink: 0 }}
-                    onClick={() => { if (editingDisc) saveProfile({ personal_discount: Number(discount) }); setEditingDisc(v => !v); }}>
+                    onClick={async () => {
+                      if (editingDisc) {
+                        // BUGFIX(#3): resync the input to the SAVED (server-clamped 0..100)
+                        // value — previously e.g. "250" stayed in the box while the backend
+                        // stored 100, so the UI lied about the effective discount.
+                        const res = await saveProfile({ personal_discount: Number(discount) });
+                        if (res && res.personal_discount !== undefined) setDiscount(res.personal_discount);
+                      }
+                      setEditingDisc(v => !v);
+                    }}>
                     {editingDisc ? <span style={{ color: '#10b981' }}>✓</span> : <Edit2 size={13} />}
                   </button>
                 </div>
@@ -808,7 +855,12 @@ const Clients = () => {
     setLoading(true);
     try {
       const [cJson, gJson] = await Promise.all([
-        apiFetch(`/api/v1/billing/admin/users/?club=${clubId}`),
+        // BUGFIX(#3): default DRF pagination caps the client list at 200 — clubs
+        // with more clients silently lost the rest (and totals/CSV were wrong).
+        // Raise the limit so the full roster loads. NOTE: this is a generous
+        // single-page cap, not true pagination — very large clubs (>2000) would
+        // still need a backend page-through, but 2000 covers realistic clubs.
+        apiFetch(`/api/v1/billing/admin/users/?club=${clubId}&limit=2000`),
         apiFetch(`/api/v1/clubs/client-groups/?club=${clubId}`).catch(() => []),
       ]);
       setClients(cJson.results || cJson || []);
