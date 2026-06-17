@@ -34,6 +34,11 @@ def process_booking_lifecycle():
         if expiry and now > b.from_at + timedelta(minutes=expiry):
             b.status = BookingStatus.CANCELED
             b.save(update_fields=["status"])
+            # If the PC was LOCKED to reserve it for this (no-show) booker, release it —
+            # otherwise it stays stuck on the lock screen forever after the no-show.
+            for pc in b.hosts.all():
+                if _release_pc_after_noshow(pc):
+                    result["released_pcs"] = result.get("released_pcs", 0) + 1
             result["expired"] += 1
             continue
 
@@ -45,6 +50,27 @@ def process_booking_lifecycle():
                     result["freed_pcs"] += 1
 
     return result
+
+
+def _release_pc_after_noshow(pc) -> bool:
+    """A no-show booking is cancelled — if its PC was LOCKED to reserve it for the booker
+    (by the end-before-booking free step), cancel that lock and send an UNLOCK so the PC
+    returns to normal use instead of being stuck on the lock screen forever."""
+    try:
+        from apps.computers.models import ComputerCommand
+        from apps.computers.models.command import CommandType, CommandStatus
+        pending_lock = ComputerCommand.objects.filter(
+            computer=pc, command_type=CommandType.LOCK, status=CommandStatus.PENDING)
+        if not pending_lock.exists():
+            return False
+        # Supersede the still-pending booking lock and instruct the shell to unlock.
+        pending_lock.update(status=CommandStatus.CANCELLED)
+        ComputerCommand.objects.create(
+            computer=pc, command_type=CommandType.UNLOCK,
+            status=CommandStatus.PENDING, payload={"reason": "noshow-release"})
+        return True
+    except Exception:
+        return False
 
 
 def _free_pc_for_booking(pc) -> bool:
