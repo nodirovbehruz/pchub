@@ -19,9 +19,16 @@ class AccountRepository(IAccountRepository):
         )
 
     def get_user_by_username(self, username: str) -> CustomUser:
-        """Get user by username or phone"""
+        """Get user by username (case-insensitive) or exact phone.
+
+        Was case-sensitive `username=` (so 'John' couldn't log in as 'john', though
+        registration enforces uniqueness case-insensitively), and a bare OR on phone let
+        a value equal to ANOTHER account's phone resolve to that account. Prefer an exact
+        username match before falling back to the phone match.
+        """
         from django.db.models import Q
-        return self.model.objects.filter(Q(username=username) | Q(phone=username)).first()
+        qs = self.model.objects.filter(Q(username__iexact=username) | Q(phone=username))
+        return qs.filter(username__iexact=username).first() or qs.first()
 
     def create_user(self, data: dict[str, Any]) -> CustomUser:
         """Create a new user"""

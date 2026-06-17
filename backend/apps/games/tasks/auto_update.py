@@ -40,9 +40,13 @@ def sync_game_versions():
             result["skipped_busy"] += 1
             continue
 
+        # Include IN_PROGRESS: once the shell picks the command up it flips to
+        # IN_PROGRESS while a large game downloads (minutes), and installed_version is
+        # only stamped on COMPLETED — so a PENDING-only check re-queued a duplicate
+        # UPDATE on every Beat tick. Dedup against both non-terminal states.
         if ComputerCommand.objects.filter(
             computer=pc, game=game, command_type=CommandType.UPDATE,
-            status=CommandStatus.PENDING,
+            status__in=[CommandStatus.PENDING, CommandStatus.IN_PROGRESS],
         ).exists():
             continue
 
@@ -78,5 +82,7 @@ def _pc_in_session(pc) -> bool:
         ).exists():
             return True
     except Exception:
-        return False
+        # Fail SAFE: on any error assume the PC IS busy so we never push an UPDATE that
+        # could interrupt a player mid-session. Was returning False (= idle) on error.
+        return True
     return False

@@ -54,6 +54,22 @@ class TaskDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIView
     permission_classes = [permissions.IsAuthenticated]
     queryset = Task.objects.all()
 
+    def perform_update(self, serializer):
+        # finished_at/finished_by are read-only to the client and were NEVER set, so the
+        # dashboard's "Завершённые задачи" (ordered by -finished_at) showed all-NULL.
+        # Stamp them server-side on the False→True transition (and clear on reopen).
+        from django.utils import timezone
+        was_finished = self.get_object().is_finished
+        obj = serializer.save()
+        if obj.is_finished and not was_finished:
+            obj.finished_at = timezone.now()
+            obj.finished_by = self.request.user
+            obj.save(update_fields=["finished_at", "finished_by"])
+        elif not obj.is_finished and was_finished:
+            obj.finished_at = None
+            obj.finished_by = None
+            obj.save(update_fields=["finished_at", "finished_by"])
+
 
 class NewsListCreateAPIView(TenantCreateMixin, TenantFilterMixin, generics.ListCreateAPIView):
     serializer_class = NewsSerializer
