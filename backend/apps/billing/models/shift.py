@@ -79,7 +79,13 @@ class Shift(models.Model):
             payments = payments.filter(admin=self.admin)
         self.total_revenue_cash = sum(p.amount_paid for p in payments if p.payment_method == "cash")
         self.total_revenue_card = sum(p.amount_paid for p in payments if p.payment_method == "card")
-        self.total_revenue = self.total_revenue_cash + self.total_revenue_card
+        # GENUINE bank transfers are real revenue and were dropped from total_revenue
+        # entirely. Exclude internal [DEPOSIT] transfers (deposit-paid POS/orders) — that
+        # money was already counted as revenue when the deposit was topped up, so counting
+        # it again here would double-count. Drawer math (discrepancy) stays cash-only.
+        transfer_rev = sum(p.amount_paid for p in payments
+                           if p.payment_method == "transfer" and "[DEPOSIT]" not in (p.note or ""))
+        self.total_revenue = self.total_revenue_cash + self.total_revenue_card + transfer_rev
         
         self.save()
         return self
