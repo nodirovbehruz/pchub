@@ -275,8 +275,8 @@ class ClientBuyTariffAPIView(APIView):
     """Client app: purchase a tariff using club deposit.
 
     POST body: { tariff_id: int, club?: int }
-    Deducts tariff.price from UserClubProfile.deposit_money,
-    adds tariff.minutes to UserBalance, creates a Payment record.
+    Deducts tariff.price from UserClubProfile.deposit_money and adds tariff.minutes to
+    the SAME UserClubProfile (the per-club time the shell reads), creates a Payment.
     Returns: { success, minutes_added, minutes_remaining, formatted_time, deposit_remaining }
     """
 
@@ -339,15 +339,16 @@ class ClientBuyTariffAPIView(APIView):
         with transaction.atomic():
             # Lock + read deposit + check + deduct ALL inside the transaction.
             # (select_for_update is a no-op outside atomic → was a double-spend race.)
-            profile = None
-            deposit = Decimal("0")
-            if club_id:
-                try:
-                    from apps.clubs.models import UserClubProfile
-                    profile = UserClubProfile.objects.select_for_update().get(user=user, club_id=club_id)
-                    deposit = profile.deposit_money
-                except Exception:
-                    profile = None
+            # Per-club is authoritative — the shell deducts time from THIS club's profile.
+            # REQUIRE a club and ALWAYS use its profile (create if missing) so purchased
+            # minutes can never land on the legacy global UserBalance that the shell never
+            # reads (the historical "пополнил депозит, а часы не появились" bug).
+            if not club_id:
+                return Response({"error": "Не указан клуб"}, status=status.HTTP_400_BAD_REQUEST)
+            from apps.clubs.models import UserClubProfile
+            UserClubProfile.objects.get_or_create(user=user, club_id=club_id)
+            profile = UserClubProfile.objects.select_for_update().get(user=user, club_id=club_id)
+            deposit = profile.deposit_money or Decimal("0")
 
             # H2: apply the client's personal/group discount (effective_discount) —
             # the operator seat path honors discounts but client self-buy charged full
@@ -390,18 +391,15 @@ class ClientBuyTariffAPIView(APIView):
                     "price": str(price),
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Deduct from deposit (+ bonus) and credit TIME to this club (per-club minutes).
-            if profile:
-                profile.deposit_money = deposit - price_from_deposit
-                if bonus_used > 0:
-                    profile.bonus_balance = (profile.bonus_balance or Decimal("0")) - bonus_used
-                profile.add_minutes(tariff.minutes)  # also saves is_active + minutes
-                profile.save(update_fields=["deposit_money", "bonus_balance"])
-                holder = profile
-            else:
-                # No club context — legacy global fallback.
-                holder, _ = UserBalance.objects.get_or_create(user=user)
-                holder.add_minutes(tariff.minutes)
+            # Deduct from deposit (+ bonus) and credit TIME to THIS club's profile — the
+            # exact same UserClubProfile the shell's per-minute deduction reads, so the
+            # bought hours actually become playable at the PC.
+            profile.deposit_money = deposit - price_from_deposit
+            if bonus_used > 0:
+                profile.bonus_balance = (profile.bonus_balance or Decimal("0")) - bonus_used
+            profile.add_minutes(tariff.minutes)  # also saves is_active + minutes
+            profile.save(update_fields=["deposit_money", "bonus_balance"])
+            holder = profile
 
             # Audit record
             Payment.objects.create(
