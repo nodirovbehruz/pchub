@@ -453,6 +453,14 @@ class BillingService:
         # mismatching club passed from the admin's active-club selector.
         club_id = computer.club_id
         profile = self._get_profile(user, club_id)
+        # Don't reset an already-running guest session — re-starting (operator double-click
+        # or a forgotten session) wiped accrued unbilled minutes to 0 → lost revenue.
+        # The operator must close (bill) the current session before starting a new one.
+        if (profile.session_mode == profile.SESSION_POSTPAID and profile.is_active
+                and profile.postpaid_started_at):
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                {"detail": "На этом ПК уже идёт гостевая постоплатная сессия — закройте её перед началом новой"})
         profile.is_guest = True
         profile.session_mode = profile.SESSION_POSTPAID
         profile.postpaid_minutes = 0
