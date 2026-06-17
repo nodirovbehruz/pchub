@@ -231,9 +231,12 @@ CACHE_TIMEOUT = {
 }
 
 # Channels layer.
-# Dev default: in-memory (no Redis dependency, single-process). Production with
-# multiple workers MUST set REDIS_CHANNELS_URL so group_send reaches every worker.
-_CHANNELS_REDIS = env.str("REDIS_CHANNELS_URL", default="")
+# Dev default: in-memory (no Redis dependency, single-process). With MULTIPLE uvicorn
+# workers the in-memory layer is per-process, so group_send (chat, balance pushes,
+# remote commands) never reaches a client connected to another worker — realtime
+# silently breaks. Fall back to the already-configured REDIS_URL when a dedicated
+# REDIS_CHANNELS_URL isn't set, so realtime works out-of-the-box wherever Redis exists.
+_CHANNELS_REDIS = env.str("REDIS_CHANNELS_URL", default="") or env.str("REDIS_URL", default="")
 if _CHANNELS_REDIS:
     CHANNEL_LAYERS = {
         "default": {
