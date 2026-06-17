@@ -47,9 +47,13 @@ class ClientGroupListCreateAPIView(APIView):
         except (TypeError, ValueError):
             discount = 0
         discount = max(0, min(100, discount))
+        # Truncate BEFORE the uniqueness check — the check used the full name but the row
+        # was created with name[:16], so two long names sharing a 16-char prefix passed
+        # the check and then collided on the unique constraint → IntegrityError 500.
+        name = name[:16]
         if ClientGroup.objects.filter(club_id=club_id, name=name).exists():
             return Response({"error": "Группа с таким именем уже существует"}, status=status.HTTP_400_BAD_REQUEST)
-        g = ClientGroup.objects.create(club_id=club_id, name=name[:16], percent_discount=discount)
+        g = ClientGroup.objects.create(club_id=club_id, name=name, percent_discount=discount)
         return Response({"id": g.id, "name": g.name, "percent_discount": g.percent_discount, "members_count": 0},
                         status=status.HTTP_201_CREATED)
 

@@ -574,8 +574,10 @@ class ClubSubscriptionAPIView(APIView):
         now = timezone.now()
         trial_days_left = None
         if club.trial_until:
+            import math
+            # ceil, not int: 2.9 days left must show 3, not 2 (a partial day still counts).
             diff = (club.trial_until - now).total_seconds() / 86400
-            trial_days_left = max(0, int(diff))
+            trial_days_left = max(0, math.ceil(diff))
 
         try:
             sub = club.subscription
@@ -606,7 +608,8 @@ class ClubSubscriptionAPIView(APIView):
                     .order_by("-granted_at").first()
                 )
                 if pp:
-                    days_to_pay = max(0, int((pp.due_at - now).total_seconds() / 86400))
+                    import math
+                    days_to_pay = max(0, math.ceil((pp.due_at - now).total_seconds() / 86400))
                     promised = {
                         "active": True,
                         "fee": str(pp.fee_amount),

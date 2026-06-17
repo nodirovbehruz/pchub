@@ -454,7 +454,10 @@ class MyVisitsAPIView(APIView):
     def get(self, request):
         from django.utils import timezone
 
-        year = int(request.query_params.get("year", timezone.now().year))
+        try:
+            year = int(request.query_params.get("year", timezone.now().year))
+        except (TypeError, ValueError):
+            return Response({"error": "year должен быть числом"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             result = service.get_my_visits_user(request.user, year)
         except Exception as e:
