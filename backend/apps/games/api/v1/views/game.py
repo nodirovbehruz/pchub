@@ -48,6 +48,21 @@ class IsAdminOrReadOnly(BasePermission):
         ).exists()
 
 
+class IsPlatformAdminOrReadOnly(BasePermission):
+    """Read for any authenticated user; WRITE only for the platform admin. The Game
+    catalog is GLOBAL (no club FK) — letting a club owner/manager edit/delete/version-
+    bump a game broke it for EVERY other club (fleet-wide auto-update, hidden/renamed
+    games). Catalog mutations must be platform-admin-only."""
+
+    def has_permission(self, request, view):
+        u = request.user
+        if not (u and u.is_authenticated):
+            return False
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return True
+        return getattr(u, "is_admin", False) or getattr(u, "user_type", "") == "admin"
+
+
 # ---------------------
 # User-Facing Endpoints
 # ---------------------
@@ -182,7 +197,7 @@ class GameCreateAPIView(generics.CreateAPIView):
 
     queryset = Game.objects.all()
     serializer_class = GameCreateSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsPlatformAdminOrReadOnly]
 
     service = GameCreateService(repository=GameRepository())
 
@@ -209,7 +224,7 @@ class GameUpdateAPIView(generics.UpdateAPIView):
 
     queryset = Game.objects.all()
     serializer_class = GameUpdateSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsPlatformAdminOrReadOnly]
     lookup_field = "slug"
 
     service = GameUpdateService(repository=GameRepository())
@@ -314,7 +329,7 @@ class GameDeleteAPIView(generics.DestroyAPIView):
     """Delete (soft delete) game (admin only)"""
 
     queryset = Game.objects.all()
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsPlatformAdminOrReadOnly]
     lookup_field = "slug"
 
     service = GameDeleteService(repository=GameRepository())
@@ -338,7 +353,7 @@ class GameBulkImportAPIView(generics.CreateAPIView):
     """Bulk import games (admin only)"""
 
     serializer_class = GameBulkImportSerializer
-    permission_classes = [IsAdminOrReadOnly]
+    permission_classes = [IsPlatformAdminOrReadOnly]
 
     service = GameCreateService(repository=GameRepository())
 

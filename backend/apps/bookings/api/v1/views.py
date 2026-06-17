@@ -75,10 +75,35 @@ class BookingDetailAPIView(TenantFilterMixin, generics.RetrieveUpdateDestroyAPIV
         # be re-opened. `status` was freely writable, so a client could PATCH a finished
         # /cancelled booking back to ACTIVE and bypass the no-show / billing logic.
         instance = self.get_object()
-        new_status = serializer.validated_data.get("status", instance.status)
+        data = serializer.validated_data
+        new_status = data.get("status", instance.status)
         if instance.status in (BookingStatus.CANCELED, BookingStatus.FINISHED) and new_status != instance.status:
             raise ValidationError({"status": "Завершённую/отменённую бронь нельзя переоткрыть"})
-        serializer.save()
+
+        # Re-run the same overlap/time-order checks as CREATE — perform_create was
+        # hardened against double-booking but PATCH (move time / change hosts) skipped
+        # it entirely, so a booking could be PATCHed onto an occupied slot (or given an
+        # inverted to_at<from_at window). Compute effective values from the update.
+        from django.db import transaction
+        from apps.computers.models import Computer
+        from_at = data.get("from_at", instance.from_at)
+        to_at = data.get("to_at", instance.to_at)
+        hosts = data.get("hosts", list(instance.hosts.all()))
+        host_ids = [h.id for h in hosts]
+        with transaction.atomic():
+            if host_ids:
+                list(Computer.objects.select_for_update().filter(id__in=host_ids))
+            if from_at and to_at and to_at <= from_at:
+                raise ValidationError({"to_at": "Конец брони должен быть позже начала"})
+            if host_ids and from_at and to_at:
+                clash = (Booking.objects
+                         .filter(club_id=instance.club_id,
+                                 status__in=[BookingStatus.ACTIVE, BookingStatus.REDEEMED],
+                                 hosts__id__in=host_ids, from_at__lt=to_at, to_at__gt=from_at)
+                         .exclude(pk=instance.pk).exists())
+                if clash:
+                    raise ValidationError({"hosts": "На это время ПК уже забронирован"})
+            serializer.save()
 
 
 class BookingRedeemAPIView(APIView):

@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import generics, permissions
 from rest_framework import serializers as drf_serializers
 
@@ -8,6 +10,11 @@ from apps.clubs.api.v1.mixins import TenantFilterMixin, validated_club_id
 class CashOrderSerializer(drf_serializers.ModelSerializer):
     signed_amount = drf_serializers.DecimalField(
         max_digits=12, decimal_places=2, read_only=True,
+    )
+    # A negative ПКО/РКО amount poisoned the shift Z-report (expected_cash) and hid a
+    # real cash shortage. Require a strictly positive amount.
+    amount = drf_serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0.01"),
     )
 
     class Meta:
