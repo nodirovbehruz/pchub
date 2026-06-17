@@ -315,8 +315,10 @@ class BillingService:
         if holder.session_mode != holder.SESSION_POSTPAID:
             try:
                 from apps.clubs.models import UserClubProfile
+                # SECURITY: scope to the AUTHORIZED club — was searching every club, so an
+                # operator authorized only for club A could close/bill club B's session.
                 active = UserClubProfile.objects.filter(
-                    user=user, session_mode="postpaid", is_active=True
+                    user=user, club_id=club_id, session_mode="postpaid", is_active=True
                 ).first()
                 if active:
                     holder = active
@@ -353,6 +355,14 @@ class BillingService:
         # next close double-billed the same minutes.
         from django.db import transaction as _txn
         with _txn.atomic():
+            # Re-lock the holder and re-check it's still postpaid. Two concurrent closes
+            # (double-click, or the stop-path racing GuestPostpaidClose) both passed the
+            # mode check above and double-billed; under the lock the loser sees PREPAID
+            # and aborts. (Race fix verified by logic — sqlite serializes writes so it
+            # can't be reproduced under load here; needs a Postgres concurrency test.)
+            holder = type(holder).objects.select_for_update().get(pk=holder.pk)
+            if holder.session_mode != holder.SESSION_POSTPAID:
+                raise ValueError("Постоплатная сессия уже закрыта")
             payment = Payment.objects.create(
                 user=user,
                 admin=admin,

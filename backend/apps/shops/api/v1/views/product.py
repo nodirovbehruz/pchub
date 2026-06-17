@@ -113,10 +113,15 @@ class ProductStockAdjustAPIView(generics.GenericAPIView):
         if delta == 0:
             return Response({"error": "delta must be non-zero"}, status=400)
 
-        stock, _ = Stock.objects.get_or_create(product=product, defaults={"quantity": 0})
-        new_qty = max(0, stock.quantity + delta)
-        stock.quantity = new_qty
-        stock.save(update_fields=["quantity"])
+        # Row-lock the stock so two concurrent adjustments can't both read the same
+        # quantity and clobber each other (lost-update). Was an unlocked read-modify-write.
+        from django.db import transaction
+        with transaction.atomic():
+            stock, _ = Stock.objects.select_for_update().get_or_create(
+                product=product, defaults={"quantity": 0})
+            new_qty = max(0, stock.quantity + delta)
+            stock.quantity = new_qty
+            stock.save(update_fields=["quantity"])
 
         return Response({
             "product_id": product.pk,

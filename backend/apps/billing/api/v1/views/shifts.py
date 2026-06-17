@@ -61,17 +61,23 @@ class ShiftOpenAPIView(APIView):
         if not club_id:
             return Response({'error': 'Нет доступа к клубу'}, status=status.HTTP_403_FORBIDDEN)
 
-        # Check if shift is already open for THIS club
-        if Shift.objects.filter(is_active=True, club_id=club_id).exists():
-            return Response({'error': 'Смена уже открыта'}, status=status.HTTP_400_BAD_REQUEST)
-
         initial_cash = float(request.data.get('initial_cash', 0) or 0)
-        shift = Shift.objects.create(
-            admin=request.user,
-            club_id=club_id,
-            initial_cash=initial_cash,
-            start_time=timezone.now(),
-        )
+        from django.db import transaction as _txn
+        from apps.clubs.models import Club as _Club
+        with _txn.atomic():
+            # Serialize per-club shift opens on the Club row — the check+create was a
+            # TOCTOU race (no lock, no unique constraint), so two concurrent opens both
+            # passed .exists() and created two active shifts. (Logic-verified; sqlite
+            # serializes writes so the race can't be reproduced under load here.)
+            _Club.objects.select_for_update().filter(id=club_id).first()
+            if Shift.objects.filter(is_active=True, club_id=club_id).exists():
+                return Response({'error': 'Смена уже открыта'}, status=status.HTTP_400_BAD_REQUEST)
+            shift = Shift.objects.create(
+                admin=request.user,
+                club_id=club_id,
+                initial_cash=initial_cash,
+                start_time=timezone.now(),
+            )
 
         # Audit log
         try:

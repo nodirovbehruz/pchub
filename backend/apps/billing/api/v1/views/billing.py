@@ -673,19 +673,28 @@ class PaymentRefundAPIView(APIView):
                 # bonus spent). No РКО fires for 'deposit' so this is the only refund path.
                 if profile is not None and payment.payment_method == "deposit" and payment.amount_paid:
                     try:
-                        profile.deposit_money = (profile.deposit_money or _D("0")) + payment.amount_paid
-                        upd = ["deposit_money"]
+                        # The sale spent (amount_paid - bonus_used) from deposit and
+                        # bonus_used from bonuses. Return EACH part to its own bucket —
+                        # was crediting the FULL amount_paid to deposit AND the bonus back,
+                        # over-refunding by bonus_used (free money).
+                        bb = _D("0")
                         m = _re.search(r"\[БОНУС\s+([0-9.]+)\]", note)
                         if m:
                             try:
                                 bb = _D(m.group(1))
-                                profile.bonus_balance = (profile.bonus_balance or _D("0")) + bb
-                                upd.append("bonus_balance")
-                                details["bonus_returned"] = str(bb)
                             except Exception:
-                                pass
+                                bb = _D("0")
+                        deposit_return = payment.amount_paid - bb
+                        if deposit_return < 0:
+                            deposit_return = _D("0")
+                        profile.deposit_money = (profile.deposit_money or _D("0")) + deposit_return
+                        upd = ["deposit_money"]
+                        if bb > 0:
+                            profile.bonus_balance = (profile.bonus_balance or _D("0")) + bb
+                            upd.append("bonus_balance")
+                            details["bonus_returned"] = str(bb)
                         profile.save(update_fields=upd)
-                        details["deposit_returned"] = str(payment.amount_paid)
+                        details["deposit_returned"] = str(deposit_return)
                     except Exception:
                         pass
 
@@ -703,10 +712,18 @@ class PaymentRefundAPIView(APIView):
                             from apps.clubs.models import ClubSettings
                             if ClubSettings.get_bool(refund_club, "bonus_system", True):
                                 from apps.loyalty.models import CashbackRule
-                                rule = (CashbackRule.objects.filter(
+                                from django.db.models import Q as _Q
+                                # Match the valid_until filter used at CREDIT time, anchored
+                                # to the topup moment — was missing, so an expired rule
+                                # (no cashback ever credited) got reversed, destroying
+                                # bonuses the client earned elsewhere.
+                                _ref = payment.created_at
+                                _q = (CashbackRule.objects.filter(
                                     club_id=refund_club, is_active=True,
-                                    deposit_threshold__lte=payment.amount_paid)
-                                    .order_by("-deposit_threshold").first())
+                                    deposit_threshold__lte=payment.amount_paid))
+                                if _ref:
+                                    _q = _q.filter(_Q(valid_until__isnull=True) | _Q(valid_until__gte=_ref))
+                                rule = _q.order_by("-deposit_threshold").first()
                                 if rule:
                                     cb = rule.compute_reward(payment.amount_paid)
                                     if cb:
