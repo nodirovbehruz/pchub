@@ -110,31 +110,50 @@ const GameModal = ({ game, groups, onClose, onSaved }) => {
     is_active: game?.is_active ?? true,
   });
   const [loading, setLoading] = useState(false);
+  const [coverFile, setCoverFile] = useState(null);   // uploaded cover image (multipart)
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const save = async () => {
     if (!form.name.trim()) { toast('Введите название игры', { type: 'warning' }); return; }
     setLoading(true);
     try {
-      const body = {
+      const fields = {
         name: form.name.trim(),
         platform: form.platform,
-        app_id: form.app_id || null,
-        executable_path: form.executable_path || null,
+        app_id: form.app_id || '',
+        executable_path: form.executable_path || '',
         version: (form.version || '1.0').trim(),
-        category: form.category || null,
+        category: form.category || '',
         is_active: form.is_active,
       };
-      if (form.header_image) body.header_image_url = form.header_image.trim();
-      if (isEdit) {
-        await apiFetch(`/api/v1/games/admin/games/${game.slug}/update/`, {
-          method: 'PATCH', body: JSON.stringify(body),
+
+      let body;
+      if (coverFile) {
+        // Upload the chosen image FILE → server media (multipart). Clear the external
+        // URL so the uploaded image wins (serializer prefers header_image_url otherwise).
+        const fd = new FormData();
+        Object.entries(fields).forEach(([k, v]) => {
+          if (v !== '' && v !== null && v !== undefined) fd.append(k, v);
         });
+        fd.append('header_image', coverFile);
+        fd.append('header_image_url', '');
+        body = fd;   // apiFetch leaves Content-Type unset → browser adds multipart boundary
+      } else {
+        const jbody = {
+          ...fields,
+          app_id: fields.app_id || null,
+          executable_path: fields.executable_path || null,
+          category: fields.category || null,
+        };
+        if (form.header_image) jbody.header_image_url = form.header_image.trim();
+        body = JSON.stringify(jbody);
+      }
+
+      if (isEdit) {
+        await apiFetch(`/api/v1/games/admin/games/${game.slug}/update/`, { method: 'PATCH', body });
         toast('Игра обновлена', { type: 'success' });
       } else {
-        await apiFetch('/api/v1/games/admin/games/create/', {
-          method: 'POST', body: JSON.stringify(body),
-        });
+        await apiFetch('/api/v1/games/admin/games/create/', { method: 'POST', body });
         toast('Игра добавлена', { type: 'success' });
       }
       onSaved(); onClose();
@@ -203,9 +222,25 @@ const GameModal = ({ game, groups, onClose, onSaved }) => {
           )}
 
           <div>
-            <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>URL обложки (необязательно)</label>
+            <label style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'block', marginBottom: '6px' }}>Обложка игры</label>
             <input value={form.header_image} onChange={e => upd('header_image', e.target.value)}
-              placeholder="https://...jpg" style={iStyle} />
+              placeholder="URL картинки (https://...jpg)" style={iStyle} disabled={!!coverFile} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <label className="btn btn-secondary" style={{ cursor: 'pointer', fontSize: '12px', padding: '6px 12px' }}>
+                📁 Загрузить файл
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => setCoverFile(e.target.files && e.target.files[0] ? e.target.files[0] : null)} />
+              </label>
+              {coverFile && (
+                <span style={{ fontSize: '12px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {coverFile.name}
+                  <button className="icon-btn" title="Убрать файл" onClick={() => setCoverFile(null)}><X size={14} /></button>
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+              Вставь ссылку ИЛИ загрузи картинку с компьютера — она сохранится на сервере и покажется в шелле.
+            </div>
           </div>
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px' }}>
