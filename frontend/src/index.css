@@ -412,6 +412,14 @@ input, select, textarea {
   background: var(--bg-input);
 }
 
+/* Native <select> dropdown options use the OS popup: without explicit colors the
+   inherited light text lands on a white background → unreadable in dark mode.
+   Force a dark popup with light text for EVERY select across the admin. */
+option {
+  background: var(--bg-panel);
+  color: var(--text-main);
+}
+
 input::placeholder, textarea::placeholder {
   color: var(--text-muted);
 }
