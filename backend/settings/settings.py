@@ -148,14 +148,17 @@ WSGI_APPLICATION = "settings.wsgi.application"
 ASGI_APPLICATION = "settings.asgi.application"
 
 # Database
+# DB_ENGINE is configurable (matches .env.example) so a dev box can run on sqlite without
+# a Postgres server. Prod default stays postgresql. For sqlite, DB_NAME is the file path
+# and USER/PASSWORD/HOST/PORT are ignored by Django.
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": env.str("DB_ENGINE", default="django.db.backends.postgresql"),
         "NAME": env.str("DB_NAME"),
-        "USER": env.str("DB_USER"),
-        "PASSWORD": env.str("DB_PASSWORD"),
-        "HOST": env.str("DB_HOST"),
-        "PORT": env.str("DB_PORT"),
+        "USER": env.str("DB_USER", default=""),
+        "PASSWORD": env.str("DB_PASSWORD", default=""),
+        "HOST": env.str("DB_HOST", default=""),
+        "PORT": env.str("DB_PORT", default=""),
     },
 }
 
