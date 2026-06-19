@@ -1440,9 +1440,12 @@ const SettingsPage = () => {
     if (!clubId) { setLoading(false); return; }
     setLoading(true);
     try {
-      const [clubData, settingsData] = await Promise.all([
+      const [clubData, settingsData, secData] = await Promise.all([
         apiFetch(`/api/v1/clubs/${clubId}/`).catch(() => null),
         apiFetch(`/api/v1/clubs/${clubId}/settings/`).catch(() => null),
+        // ShellSecurity lives in a SEPARATE model/endpoint (high-access/exit code,
+        // TightVNC, hidden drives, restrictions) — must be loaded/saved on its own.
+        apiFetch(`/api/v1/integrations/security/${clubId}/`).catch(() => null),
       ]);
       if (clubData) {
         setClub({
@@ -1461,6 +1464,18 @@ const SettingsPage = () => {
       }
       if (settingsData?.data) {
         setSettings(prev => ({ ...prev, ...settingsData.data }));
+      }
+      if (secData) {
+        // Merge the per-club ShellSecurity fields so the «Безопасность» tab shows the
+        // real values (not the form defaults) and saves them back to the right place.
+        setSettings(prev => ({
+          ...prev,
+          high_access_password:   secData.high_access_password ?? prev.high_access_password,
+          tightvnc_enabled:       secData.tightvnc_enabled ?? prev.tightvnc_enabled,
+          hidden_drives:          secData.hidden_drives ?? prev.hidden_drives,
+          block_external_storage: secData.block_external_storage ?? prev.block_external_storage,
+          block_chrome_downloads: secData.block_chrome_downloads ?? prev.block_chrome_downloads,
+        }));
       }
       setDirty(false); // freshly loaded state matches the server
     } finally {
@@ -1505,6 +1520,18 @@ const SettingsPage = () => {
         apiFetch(`/api/v1/clubs/${clubId}/settings/`, {
           method: 'PATCH',
           body: JSON.stringify({ data: { ...settings, contact_email: club.email } }),
+        }),
+        // ShellSecurity (пароль высокого доступа/выхода, TightVNC, диски, ограничения)
+        // — отдельная модель, сохраняем в свой эндпоинт, иначе пароль терялся.
+        apiFetch(`/api/v1/integrations/security/${clubId}/`, {
+          method: 'PATCH',
+          body: JSON.stringify(
+            ['high_access_password', 'tightvnc_enabled', 'hidden_drives',
+             'block_external_storage', 'block_chrome_downloads'].reduce((acc, k) => {
+              if (settings[k] !== undefined) acc[k] = settings[k];
+              return acc;
+            }, {})
+          ),
         }),
       ]);
       setDirty(false); // saved — drop the unsaved-changes guard
