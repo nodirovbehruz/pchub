@@ -23,6 +23,10 @@ def _shift_realtime(shift):
     card_rev = payments.filter(payment_method='card').aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
     total_rev = cash_rev + card_rev
     initial = Decimal(str(shift.initial_cash or 0))
+    # Manual cash orders (ПКО add to the drawer, РКО remove) MUST be in the live cash
+    # register too — the close-shift discrepancy already counts them, so ignoring them
+    # here made the header «Касса» wrong (a 4M РКО didn't reduce it).
+    manual_net = shift._manual_cash_orders_net()
     return {
         'id': shift.id,
         'opened_at': shift.start_time.isoformat() if shift.start_time else None,
@@ -30,7 +34,8 @@ def _shift_realtime(shift):
         'initial_cash': str(initial),
         'cash_revenue': str(cash_rev),
         'card_revenue': str(card_rev),
-        'expected_cash': str(initial + cash_rev),
+        'manual_cash_orders': str(manual_net),
+        'expected_cash': str(initial + cash_rev + manual_net),
         'total_revenue': str(total_rev),
     }
 

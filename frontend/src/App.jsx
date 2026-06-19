@@ -518,7 +518,9 @@ function App() {
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', marginRight: '8px' }}>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Касса</span>
                 <span style={{ fontSize: '14px', fontWeight: 600, color: '#10b981' }}>
-                  {Number(activeShift?.total_revenue || 0).toLocaleString('ru-RU')} сум
+                  {/* Касса = деньги в ящике (нач. касса + наличная выручка + ПКО − РКО),
+                      а не выручка. Раньше показывало total_revenue и игнорировало ордера. */}
+                  {Number(activeShift?.expected_cash || 0).toLocaleString('ru-RU')} сум
                 </span>
               </div>
             )}
