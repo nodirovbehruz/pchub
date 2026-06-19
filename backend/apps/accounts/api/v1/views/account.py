@@ -474,11 +474,14 @@ class ClientCreateAPIView(APIView):
         if not username:
             return Response({'error': 'Логин обязателен'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Default password = username; must be ≥6 chars
-        if not password:
+        # Password rule: an EXPLICITLY typed password must be ≥6 chars. If left blank,
+        # the login itself becomes the password (the form's documented convenience) —
+        # no length gate, so short logins like "top" still work as promised.
+        if password:
+            if len(password) < 6:
+                return Response({'error': 'Пароль минимум 6 символов'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
             password = username
-        if len(password) < 6:
-            return Response({'error': 'Пароль минимум 6 символов'}, status=status.HTTP_400_BAD_REQUEST)
 
         if CustomUser.objects.filter(username__iexact=username).exists():
             return Response({'error': 'Пользователь с таким логином уже существует'}, status=status.HTTP_400_BAD_REQUEST)
