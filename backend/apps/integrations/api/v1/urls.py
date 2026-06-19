@@ -63,6 +63,14 @@ class ShellSecurityDetailAPIView(generics.RetrieveUpdateAPIView):
     queryset = ShellSecurity.objects.all()
     lookup_field = "club_id"
 
+    def get_object(self):
+        # get_or_create so the shell (and admin panel) never 404 on a club whose
+        # ShellSecurity row was never created — it's auto-made with safe defaults
+        # (high_access_password="pasw0rd"). Without this the shell can't read the
+        # per-club admin/exit code and falls back to the local default.
+        obj, _ = ShellSecurity.objects.get_or_create(club_id=self.kwargs["club_id"])
+        return obj
+
 
 class BlockedAppListCreateAPIView(generics.ListCreateAPIView):
     serializer_class = BlockedAppSerializer
