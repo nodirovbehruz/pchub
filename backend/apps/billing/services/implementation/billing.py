@@ -226,6 +226,25 @@ class BillingService:
             has_access = True  # postpaid clients always have access until operator closes
         else:
             has_access = holder.is_active and holder.minutes_remaining > 0
+
+        # Per-club deposit + "can the client buy a tariff right now from that deposit".
+        # Without this the shell only knows minutes==0 and treats a paid-up client (money
+        # on deposit, no time bought yet) as "balance ended" → kicks them to login. With
+        # can_buy_tariff the shell instead opens the tariffs screen so they convert
+        # money → minutes themselves. Only meaningful while not already playing / blocked.
+        deposit = getattr(holder, "deposit_money", None) or Decimal("0")
+        can_buy_tariff = False
+        if not has_access and not blocked and holder.session_mode != holder.SESSION_POSTPAID and deposit > 0:
+            from apps.billing.models import TariffPlan
+            cheapest = (
+                TariffPlan.objects
+                .filter(is_active=True, **({"club_id": club_id} if club_id else {}))
+                .order_by("price")
+                .values_list("price", flat=True)
+                .first()
+            )
+            can_buy_tariff = cheapest is not None and deposit >= cheapest
+
         return {
             "has_access": has_access,
             "blocked": blocked,
@@ -235,6 +254,9 @@ class BillingService:
             # Elapsed (wall-clock) so the shell's count-UP timer is correct even
             # when the shell connected long after the operator started postpaid.
             "postpaid_minutes": self._postpaid_elapsed_minutes(holder),
+            # Deposit (string, like topup) + self-service-purchase signal for the shell.
+            "deposit_money": str(deposit),
+            "can_buy_tariff": can_buy_tariff,
         }
 
     # ── Postpaid ──────────────────────────────────────────────────────────────

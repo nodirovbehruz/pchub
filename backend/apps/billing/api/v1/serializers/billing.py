@@ -18,6 +18,10 @@ class BalanceResponseSerializer(serializers.Serializer):
     has_access = serializers.BooleanField()
     minutes_remaining = serializers.IntegerField()
     formatted_time = serializers.CharField()
+    # Per-club deposit + whether the client can self-buy a tariff from it (shell lets a
+    # paid-up but time-less client buy instead of kicking them to login).
+    deposit_money = serializers.CharField(required=False)
+    can_buy_tariff = serializers.BooleanField(required=False)
 
 
 class TariffPriceSerializer(serializers.ModelSerializer):
