@@ -84,15 +84,21 @@ class DashboardStatsAPIView(APIView):
             )
         payments_qs = payments_qs.exclude(note__icontains='[REFUNDED]')
 
-        # Tariffs: payments where time was added (minutes > 0), not a POS sale
+        # Tariffs REVENUE = real money only. A tariff bought FROM deposit
+        # (payment_method='deposit') is not new revenue — already counted at top-up.
         tariffs_rev = (
             payments_qs.filter(minutes_added__gt=0)
+            .exclude(payment_method='deposit')
+            .exclude(note__contains='[DEPOSIT]')
             .aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
         )
 
-        # POS product/service sales: tagged with [POS] note
+        # POS product/service sales: tagged with [POS] note. Exclude deposit-funded
+        # shop orders ([DEPOSIT][POS]) — that money was already counted at top-up.
         pos_rev = (
             payments_qs.filter(note__contains='[POS]')
+            .exclude(payment_method='deposit')
+            .exclude(note__contains='[DEPOSIT]')
             .aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
         )
 
@@ -106,7 +112,10 @@ class DashboardStatsAPIView(APIView):
         )
 
         total_revenue = (
-            payments_qs.aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
+            payments_qs
+            .exclude(payment_method='deposit')
+            .exclude(note__contains='[DEPOSIT]')
+            .aggregate(s=Sum('amount_paid'))['s'] or Decimal('0')
         )
 
         revenue_by_category = {

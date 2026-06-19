@@ -74,7 +74,12 @@ class AnalyticsOverviewAPIView(APIView):
             created_at__date__lte=date_to,
         ).exclude(note__icontains="[REFUNDED]")
 
-        total_revenue = payments.aggregate(s=Sum("amount_paid"))["s"] or Decimal("0")
+        # Revenue = REAL money in. Exclude deposit-funded buys (payment_method="deposit")
+        # and internal "[DEPOSIT]"-marked transfers: that money was already counted as
+        # revenue when the client topped up their deposit, so counting the deposit-funded
+        # purchase again double-counts it (mirrors shift.py:86-87 / dashboard.py).
+        real_money = payments.exclude(payment_method="deposit").exclude(note__icontains="[DEPOSIT]")
+        total_revenue = real_money.aggregate(s=Sum("amount_paid"))["s"] or Decimal("0")
 
         # ── Revenue by payment method ──
         def method_sum(m):
@@ -83,6 +88,7 @@ class AnalyticsOverviewAPIView(APIView):
         card_rev = method_sum("card")
         online_rev = (
             payments.filter(payment_method__in=["transfer", "sbp", "online"])
+            .exclude(note__icontains="[DEPOSIT]")
             .aggregate(s=Sum("amount_paid"))["s"] or Decimal("0")
         )
         deposit_pay = method_sum("deposit")
@@ -319,6 +325,9 @@ class AnalyticsShiftsAPIView(APIView):
         payments = _range_payments(club_id, date_from, date_to)
         active = payments.exclude(note__icontains="[REFUNDED]")
         refunded = payments.filter(note__icontains="[REFUNDED]")
+        # Revenue/products = REAL money only — deposit-funded buys were already counted
+        # at top-up, so excluding them avoids double-counting per operator.
+        revenue_pays = active.exclude(payment_method="deposit").exclude(note__icontains="[DEPOSIT]")
 
         # Group by admin (operator)
         emp = {}
@@ -329,7 +338,7 @@ class AnalyticsShiftsAPIView(APIView):
                             "services": 0.0, "bonus": 0.0, "refunds": 0.0}
             return emp[uid]
 
-        for p in active.select_related("admin"):
+        for p in revenue_pays.select_related("admin"):
             uid = p.admin_id
             uname = p.admin.username if p.admin else "—"
             r = row(uid, uname)
@@ -454,7 +463,10 @@ class AnalyticsEquipmentAPIView(APIView):
             d = per_pc.setdefault(p.computer_id, {"minutes": 0, "sessions": 0, "revenue": 0.0})
             d["minutes"] += int(p.minutes_added or 0)
             d["sessions"] += 1
-            d["revenue"] += _d(p.amount_paid)
+            # Minutes/sessions are consumption (count deposit buys too); revenue is REAL
+            # money only — deposit-funded buys were already counted at top-up.
+            if p.payment_method != "deposit" and "[DEPOSIT]" not in (p.note or ""):
+                d["revenue"] += _d(p.amount_paid)
 
         rows = []
         total_busy_min = 0
