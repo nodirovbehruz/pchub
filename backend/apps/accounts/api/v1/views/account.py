@@ -529,6 +529,20 @@ class ClientCreateAPIView(APIView):
             except Exception:
                 pass
 
+            # Telegram notification — the Settings UI promises «новых клиентах» but it was
+            # never wired. Send a new-client alert to the club's channel.
+            try:
+                from apps.clubs.services.telegram import notify_club
+                full = f"{first_name} {last_name}".strip()
+                notify_club(club_id, (
+                    f"👤 <b>Новый клиент</b>\n"
+                    f"🔑 Логин: {username}"
+                    + (f"\n📛 Имя: {full}" if full else "")
+                    + (f"\n📞 Телефон: {phone}" if phone else "")
+                ))
+            except Exception:
+                pass
+
         return Response({
             'id': str(client.pk),
             'username': client.username,
