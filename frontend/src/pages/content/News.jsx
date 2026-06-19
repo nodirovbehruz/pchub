@@ -159,7 +159,11 @@ const NewsForm = ({ item, clubId, onClose, onSaved }) => {
       // BUGFIX: when the button is disabled, button_text was cleared but button_url
       // was omitted from the payload — leaving a stale URL in the DB on PATCH.
       // Always send button_url so it is cleared when the button is off.
-      fd.append('button_url', btnEnabled ? btnUrl : '');
+      // Normalize: the field is a URLField, so a bare "example.com" (or "test") fails
+      // with HTTP 400. Prepend https:// when the user omitted the scheme.
+      let url = btnEnabled ? (btnUrl || '').trim() : '';
+      if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+      fd.append('button_url', url);
       fd.append('is_published', published ? 'true' : 'false');
       // DateTimeField: omit entirely when empty (DRF rejects empty strings)
       if (periodEnabled && showFrom)  fd.append('show_from',  new Date(showFrom).toISOString());
@@ -174,7 +178,14 @@ const NewsForm = ({ item, clubId, onClose, onSaved }) => {
         toast('Новость создана', { type: 'success' });
       }
       onSaved();
-    } catch (e) { toast(e.message, { type: 'error' }); }
+    } catch (e) {
+      // Surface the real validation message (e.g. «button_url: Enter a valid URL»,
+      // «Обложка должна быть не больше 640 КБ») instead of a bare «HTTP 400».
+      const msg = e.body
+        ? Object.entries(e.body).map(([k, v]) => `${k}: ${[].concat(v).join(', ')}`).join('; ')
+        : e.message;
+      toast(msg || 'Ошибка сохранения', { type: 'error' });
+    }
     finally { setSaving(false); }
   };
 
