@@ -172,7 +172,12 @@ const Dashboard = () => {
 
   const createTask = async () => {
     const title = newTask.trim();
-    if (!title) return;
+    // Always give feedback so the button never feels "dead": empty field / no club were
+    // silent returns before (looked like the button didn't work). Log the click so the
+    // console shows whether it even fired and with what title/club.
+    console.log('[createTask] click — title:', JSON.stringify(title), '| club:', clubId);
+    if (!title) { toast('Сначала введите текст задачи', { type: 'warning' }); return; }
+    if (!clubId) { toast('Клуб не выбран — перезайдите в аккаунт', { type: 'error' }); return; }
     setAddingTask(true);
     try {
       await apiFetch('/api/v1/content/tasks/', {
