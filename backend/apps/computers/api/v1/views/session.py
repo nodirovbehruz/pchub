@@ -3,7 +3,6 @@ from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.api.v1.permissions.admin import IsAdmin
 from apps.computers.models.computer import Computer
 from apps.computers.models.enums import ComputerStatus
 
@@ -19,7 +18,11 @@ class AdminSessionStartAPIView(APIView):
         amount_paid: float
     }
     """
-    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    # Was [IsAuthenticated, IsAdmin] → only the PLATFORM admin could start a session, so a
+    # club owner/operator at the front desk got 403 selling time to a walk-in guest. Starting
+    # a session is everyday front-desk work — allow the PC's club staff. The per-club guard
+    # below stops a plain [IsAuthenticated] from being an IDOR (start on any club's PC).
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         pc_id = request.data.get('computer_id')
@@ -32,6 +35,21 @@ class AdminSessionStartAPIView(APIView):
             pc = Computer.objects.get(id=pc_id)
         except Computer.DoesNotExist:
             return Response({'error': 'ПК не найден'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Per-club guard: only the PC's club staff (or platform admin) may start a session on
+        # it. Without this, plain [IsAuthenticated] would let any user start a session on any
+        # club's PC (IDOR — charging that club's register / consuming its time).
+        u = request.user
+        if not (getattr(u, 'is_admin', False) or getattr(u, 'user_type', '') == 'admin'):
+            from apps.clubs.models import Club, ClubMembership
+            ok = bool(pc.club_id) and (
+                Club.objects.filter(id=pc.club_id, owner=u).exists()
+                or ClubMembership.objects.filter(
+                    user=u, club_id=pc.club_id, is_active=True,
+                    role__in=['owner', 'manager', 'operator']).exists())
+            if not ok:
+                return Response({'error': 'Нет прав на управление ПК этого клуба'},
+                                status=status.HTTP_403_FORBIDDEN)
 
         # Enforce HARD bookings: can't start a session on a PC during another client's
         # hard-booking window (the hard_booking flag had no enforcement anywhere).
