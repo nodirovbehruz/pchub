@@ -600,16 +600,33 @@ const Shop = () => {
   };
 
   /* ── cart ops ── */
+  // Products carry current_stock; services/combos don't (treated as unlimited). Cap cart
+  // quantity at the stock — the backend rejects oversell with 400, so without this the
+  // operator could build a cart of 30 from 9 in stock and only fail at payment.
+  const stockOf = (it) => (it?.current_stock == null ? Infinity : Number(it.current_stock));
+
   const addToCart = (item) => {
+    const max = stockOf(item);
     setCart(prev => {
       const price = Number(item.price ?? item.sale_price ?? item.base_price ?? 0);
       const ex = prev.find(c => c.id === item.id && c.type === tab);
+      if ((ex ? ex.qty : 0) + 1 > max) {
+        toast(`Недостаточно на складе: всего ${max} шт.`, { type: 'warning' });
+        return prev;
+      }
       if (ex) return prev.map(c => c.id === item.id && c.type === tab ? { ...c, qty: c.qty + 1 } : c);
       return [...prev, { ...item, price, qty: 1, type: tab, cartId: `${tab}_${item.id}` }];
     });
   };
   const updateQty = (cartId, delta) => setCart(prev =>
-    prev.map(c => c.cartId === cartId ? { ...c, qty: c.qty + delta } : c).filter(c => c.qty > 0));
+    prev.map(c => {
+      if (c.cartId !== cartId) return c;
+      if (delta > 0 && c.qty + delta > stockOf(c)) {
+        toast(`Недостаточно на складе: всего ${stockOf(c)} шт.`, { type: 'warning' });
+        return c;
+      }
+      return { ...c, qty: c.qty + delta };
+    }).filter(c => c.qty > 0));
   const removeItem = (cartId) => setCart(prev => prev.filter(c => c.cartId !== cartId));
 
   /* ── checkout ── */
