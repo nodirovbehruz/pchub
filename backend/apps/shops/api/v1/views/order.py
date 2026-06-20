@@ -33,6 +33,29 @@ class CreateOrderAPIView(APIView):
         """Create an order from the user's cart"""
         hardware_id = request.data.get("hardware_id") if isinstance(request.data, dict) else None
         order = self.service.create_order_from_cart(request.user, hardware_id=hardware_id)
+
+        # Notify the club's Telegram that a client ordered from the shell shop. The order's
+        # club is taken from the PC it was placed on. Best-effort: a Telegram failure must
+        # never break the order response.
+        try:
+            club_id = getattr(order.computer, "club_id", None)
+            if club_id:
+                from apps.clubs.services.telegram import notify_club
+                items = list(order.items.select_related("product").all())
+                lines = "\n".join(
+                    f"  • {it.quantity}× {it.product.name} — {it.subtotal} сум" for it in items
+                ) or "  —"
+                pc = getattr(order.computer, "name", None) or "—"
+                notify_club(club_id, (
+                    f"🛒 <b>Новый заказ из магазина</b>\n"
+                    f"👤 Клиент: {order.account.username}\n"
+                    f"🖥 ПК: {pc}\n"
+                    f"📦 Товары:\n{lines}\n"
+                    f"💰 Итого: {order.total_price} сум"
+                ))
+        except Exception:
+            pass
+
         serializer = OrderSerializer(order, context={"request": request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
