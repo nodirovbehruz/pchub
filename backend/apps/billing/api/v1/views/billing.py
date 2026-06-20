@@ -1044,9 +1044,12 @@ class GuestStatusAPIView(APIView):
         if not guest:
             return Response({"active": False})
 
+        # Recognize BOTH postpaid AND prepaid guests. A prepaid fixed-tariff guest has
+        # is_active=True + minutes on the profile (the shell reads its balance after it
+        # auto-enters), so don't restrict to postpaid only — else a guest who PAID for a
+        # fixed tariff never unlocked ("деньги упали, комп не включился").
         profile = UserClubProfile.objects.filter(
-            user=guest, club_id=computer.club_id, is_guest=True,
-            session_mode="postpaid", is_active=True,
+            user=guest, club_id=computer.club_id, is_guest=True, is_active=True,
         ).first()
         if not profile:
             return Response({"active": False})

@@ -178,6 +178,23 @@ class AdminSessionStartAPIView(APIView):
                 total_amount=resolved_price,
                 notes=f"Tariff: {tariff.name if tariff else 'manual'}",
             )
+            # CRITICAL: actually unlock the PC for the guest. The shell auto-enters as the
+            # per-PC guest account (guest-pc-<id>) and reads ITS balance — so a prepaid
+            # tariff must credit the bought minutes to that guest profile, else the payment
+            # goes through but the PC never unlocks ("деньги упали, комп не включился").
+            if minutes > 0:
+                try:
+                    from apps.billing.services.implementation.billing import BillingService
+                    _svc = BillingService()
+                    guest_user = _svc._get_or_create_guest_user(pc)
+                    gprofile = _svc._get_profile(guest_user, pc.club_id)
+                    if gprofile is not None:
+                        gprofile.is_guest = True
+                        gprofile.session_mode = gprofile.SESSION_PREPAID
+                        gprofile.save(update_fields=["is_guest", "session_mode"])
+                        gprofile.add_minutes(minutes)  # += minutes, sets is_active=True
+                except Exception:
+                    pass
 
         # Set PC online
         pc.status = ComputerStatus.ONLINE
