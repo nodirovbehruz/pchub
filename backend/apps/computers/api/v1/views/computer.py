@@ -265,8 +265,11 @@ class ComputerListAPIView(generics.ListAPIView):
                 from apps.accounts.models import CustomUser
                 hw_to_pid = {p.hardware_id: p.id for p in pcs if p.hardware_id}
                 hw_to_club = {p.hardware_id: p.club_id for p in pcs if p.hardware_id}
+                # is_active_session=True is REQUIRED: logout sets it False but does NOT clear
+                # active_hardware_id, so without this a logged-out client kept showing as seated.
                 seated = list(CustomUser.objects.filter(
-                    active_hardware_id__in=list(hw_to_pid)
+                    active_hardware_id__in=list(hw_to_pid),
+                    is_active_session=True,
                 ).exclude(username__startswith="guest-pc-"))
                 seated_profs = {
                     (pr.user_id, pr.club_id): pr
