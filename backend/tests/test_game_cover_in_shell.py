@@ -31,3 +31,15 @@ def test_game_icon_falls_back_to_uploaded_cover(api, make_club):
     icon = GameListSerializer(g).data["icon"]
     assert "picsum" not in icon, f"icon fell back to placeholder: {icon}"
     assert "games/headers" in icon, f"icon should be the uploaded cover: {icon}"
+
+
+@pytest.mark.django_db
+def test_game_serializer_includes_category_name():
+    """The shell's computer-games endpoint uses GameSerializer; it must expose category_name
+    so the shell groups games into sections (Шутеры/Games/…) instead of all under «Прочее»."""
+    from apps.games.models import Game
+    from apps.games.models.game import Category
+    from apps.games.api.v1.serializers.game import GameSerializer
+    cat = Category.objects.create(name="Шутеры", slug="shooters-x")
+    g = Game.objects.create(name="CS2", slug="cs2-x", platform="steam", category=cat)
+    assert GameSerializer(g).data["category_name"] == "Шутеры"

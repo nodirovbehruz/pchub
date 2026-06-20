@@ -17,6 +17,9 @@ class GameSerializer(serializers.ModelSerializer):
     header_image = serializers.SerializerMethodField()
     text_image = serializers.SerializerMethodField()
     tags = TagSerializer(many=True, read_only=True)
+    # Group name (Шутеры/Гонки/«Games»/«Steam»…) so the shell can group games into sections
+    # like the admin. This serializer feeds the shell's computer-games endpoint.
+    category_name = serializers.CharField(source="category.name", read_only=True, default=None)
 
     class Meta:
         model = Game
@@ -34,6 +37,7 @@ class GameSerializer(serializers.ModelSerializer):
             "developer",
             "publisher",
             "tags",
+            "category_name",
         ]
 
     def _fallback(self, obj, kind, w, h):
