@@ -40,9 +40,17 @@ class GameSerializer(serializers.ModelSerializer):
         return f"https://picsum.photos/seed/game-{obj.id}-{kind}/{w}/{h}"
 
     def get_icon(self, obj):
+        # Fall back to the uploaded cover (header_image) when there's no separate icon —
+        # the shell games card binds `icon`, so without this it showed a picsum
+        # placeholder instead of the operator-uploaded cover.
         if obj.icon:
             request = self.context.get("request")
             return request.build_absolute_uri(obj.icon.url) if request else obj.icon.url
+        if getattr(obj, "header_image_url", ""):
+            return obj.header_image_url
+        if obj.header_image:
+            request = self.context.get("request")
+            return request.build_absolute_uri(obj.header_image.url) if request else obj.header_image.url
         return self._fallback(obj, "icon", 64, 64)
 
     def get_header_image(self, obj):
@@ -100,8 +108,16 @@ class GameListSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(obj_field.url) if request else obj_field.url
 
     def get_icon(self, obj):
+        # The admin uploads ONE image — the cover (header_image); there's no separate
+        # icon field in the UI. The shell games card binds `icon`, so fall back to the
+        # uploaded cover here, otherwise the card showed a random picsum placeholder
+        # ("не та иконка") instead of the cover the operator uploaded.
         if obj.icon:
             return self._abs(obj.icon)
+        if getattr(obj, "header_image_url", ""):
+            return obj.header_image_url
+        if obj.header_image:
+            return self._abs(obj.header_image)
         return f"https://picsum.photos/seed/game-{obj.id}-icon/64/64"
 
     def get_cover(self, obj):
