@@ -280,6 +280,26 @@ class AdminSessionStopAPIView(APIView):
         except Exception:
             pass
 
+        # Guest PREPAID session: zero the per-PC guest profile so the shell LOCKS. Postpaid
+        # is billed & closed above; prepaid just stops. Without this «Завершить сеанс» removed
+        # the session from the admin but the shell kept playing — the guest profile still had
+        # minutes + is_active=True, so guest-status/balance still reported access.
+        try:
+            from apps.accounts.models import CustomUser as _CU
+            from apps.clubs.models import UserClubProfile as _UCP
+            _g = _CU.objects.filter(username=f"guest-pc-{pc.id}").first()
+            if _g:
+                _UCP.objects.filter(user=_g, club_id=pc.club_id, is_guest=True).update(
+                    minutes_remaining=0, is_active=False)
+                try:
+                    from realtime.broadcast import push_balance
+                    push_balance(_g.pk, {"minutes_remaining": 0, "formatted_time": "00:00",
+                                         "has_access": False, "session_mode": "prepaid"})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # Terminate a REAL logged-in client at this PC (not the synthetic guest).
         # Was a no-op for normal logins: the shell kept its JWT, kept deducting time
         # and playing, and its heartbeat reverted pc.status to ONLINE. Mirror the
