@@ -240,6 +240,54 @@ class ComputerListAPIView(generics.ListAPIView):
                         "postpaid_rate": str(rate),
                         "amount_due": amount_due,
                     }
+                # Guest PREPAID (fixed-tariff) sessions also create no ClientSession — surface
+                # them too, so a guest who bought TIME on the shell shows the PC as occupied.
+                for prof in (
+                    UserClubProfile.objects
+                    .filter(user__username__in=list(guest_usernames),
+                            session_mode="prepaid", is_active=True, minutes_remaining__gt=0)
+                    .select_related("user")
+                ):
+                    pid = guest_usernames.get(prof.user.username)
+                    if pid is None or pid in sess_map:
+                        continue
+                    sess_map[pid] = {
+                        "id": f"prepaid-{pid}",
+                        "client": "Гость",
+                        "tariff": "Тариф",
+                        "started_at": None,
+                        "time_left_minutes": prof.minutes_remaining,
+                    }
+
+                # Registered clients seated at a PC who bought a tariff ON THE SHELL — that
+                # path creates no ClientSession either, so the admin showed the PC as free.
+                # Match the user's active_hardware_id to the PC + their active per-club profile.
+                from apps.accounts.models import CustomUser
+                hw_to_pid = {p.hardware_id: p.id for p in pcs if p.hardware_id}
+                hw_to_club = {p.hardware_id: p.club_id for p in pcs if p.hardware_id}
+                seated = list(CustomUser.objects.filter(
+                    active_hardware_id__in=list(hw_to_pid)
+                ).exclude(username__startswith="guest-pc-"))
+                seated_profs = {
+                    (pr.user_id, pr.club_id): pr
+                    for pr in UserClubProfile.objects.filter(
+                        user__in=seated, is_active=True, minutes_remaining__gt=0)
+                }
+                for u in seated:
+                    pid = hw_to_pid.get(u.active_hardware_id)
+                    if pid is None or pid in sess_map:
+                        continue
+                    pr = seated_profs.get((u.id, hw_to_club.get(u.active_hardware_id)))
+                    if pr is None:
+                        continue
+                    sess_map[pid] = {
+                        "id": f"user-{u.id}-{pid}",
+                        "client": u.username,
+                        "tariff": "Тариф",
+                        "started_at": None,
+                        "time_left_minutes": pr.minutes_remaining,
+                    }
+
                 ctx["active_sessions_map"] = sess_map
             except Exception:
                 ctx["active_sessions_map"] = {}
