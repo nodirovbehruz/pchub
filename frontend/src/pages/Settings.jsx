@@ -579,8 +579,8 @@ const PanelTab = ({ s, upd }) => {
         <Row label="Отмена платежей">
           <Tog value={s.allow_payment_cancel} onChange={v => upd('allow_payment_cancel', v)} label="Разрешено" />
         </Row>
-        <Row label="Период отмены (мин)" hint="В течение скольки минут можно отменить платёж">
-          <Num value={s.cancel_period_min} onChange={e => upd('cancel_period_min', e.target.value)} placeholder="5" />
+        <Row label="Период отмены (мин)" hint="В течение скольки минут можно отменить платёж. 0 = без ограничения">
+          <Num value={s.cancel_period_min} onChange={e => upd('cancel_period_min', e.target.value)} placeholder="0" />
         </Row>
         <Row label="Обязательная печать отчёта при закрытии смены">
           <Tog value={s.mandatory_report} onChange={v => upd('mandatory_report', v)} label="Включено" />
@@ -1358,7 +1358,7 @@ const DEFAULT_SETTINGS = {
   bonus_writeoff_pct: 50,
   personal_discount_auto: true,
   allow_payment_cancel: true,
-  cancel_period_min: 5,
+  cancel_period_min: 0,   // 0 = без ограничения по времени (раньше 5 мин молча блокировали возврат)
   mandatory_report: false,
   print_stock_list: false,
   operator_client_registration: true,

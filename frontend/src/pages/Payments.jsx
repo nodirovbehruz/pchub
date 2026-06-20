@@ -292,7 +292,11 @@ const Payments = () => {
       if (res.restored_stock?.length) m += ` · Склад восстановлен (${res.restored_stock.length} поз.)`;
       if (res.deposit_returned) m += ` · Депозит +${fmtMoney(res.deposit_returned)}`;
       toast(m, { type: 'success' }); load();
-    } catch (e) { toast('Ошибка: ' + (e.message || ''), { type: 'error' }); }
+    } catch (e) {
+      // Show the backend's reason (e.g. «Период отмены истёк (5 мин)») instead of a bare
+      // "HTTP 400" — the operator needs to know WHY a refund was rejected.
+      toast('Ошибка: ' + (e.body?.error || e.message || ''), { type: 'error' });
+    }
   };
 
   /* ── Cash order ── */
