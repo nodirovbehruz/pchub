@@ -200,7 +200,7 @@ class GameCreateAPIView(generics.CreateAPIView):
 
     queryset = Game.objects.all()
     serializer_class = GameCreateSerializer
-    permission_classes = [IsPlatformAdminOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
 
     service = GameCreateService(repository=GameRepository())
 
@@ -227,7 +227,7 @@ class GameUpdateAPIView(generics.UpdateAPIView):
 
     queryset = Game.objects.all()
     serializer_class = GameUpdateSerializer
-    permission_classes = [IsPlatformAdminOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
     lookup_field = "slug"
 
     service = GameUpdateService(repository=GameRepository())
@@ -335,7 +335,7 @@ class GameDeleteAPIView(generics.DestroyAPIView):
     """Delete (soft delete) game (admin only)"""
 
     queryset = Game.objects.all()
-    permission_classes = [IsPlatformAdminOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
     lookup_field = "slug"
 
     service = GameDeleteService(repository=GameRepository())
@@ -359,7 +359,7 @@ class GameBulkImportAPIView(generics.CreateAPIView):
     """Bulk import games (admin only)"""
 
     serializer_class = GameBulkImportSerializer
-    permission_classes = [IsPlatformAdminOrReadOnly]
+    permission_classes = [IsAdminOrReadOnly]
 
     service = GameCreateService(repository=GameRepository())
 
