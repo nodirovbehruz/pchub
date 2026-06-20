@@ -183,7 +183,10 @@ const Dashboard = () => {
       setNewTask('');
       load();
     } catch (e) {
-      toast('Ошибка: ' + (e.message || 'server error'), { type: 'error' });
+      // Surface the backend's reason (e.g. «Нет доступа к клубу») instead of a bare
+      // "HTTP 4xx", and log the full detail so the cause is visible in the console.
+      console.error('createTask failed:', e?.status, e?.body || e);
+      toast('Ошибка: ' + (e?.body?.error || e?.body?.detail || e?.message || 'server error'), { type: 'error' });
     } finally {
       setAddingTask(false);
     }
