@@ -29,7 +29,10 @@ class CategoryCreateService(ICategoryCreateService):
                 f"Category with slug '{data.get('slug')}' already exists"
             )
 
-        return self.repository.create(**data)
+        # repository.create(data: dict) takes the dict itself — spreading it as **data
+        # raised "create() got an unexpected keyword argument 'name'" → 500 on every
+        # category (shop "группа") create.
+        return self.repository.create(data)
 
 
 class CategoryUpdateService(ICategoryUpdateService):
