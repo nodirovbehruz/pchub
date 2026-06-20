@@ -619,19 +619,20 @@ const News = () => {
                       {fmtDateTime(n.created_at)}
                     </td>
 
-                    {/* Actions */}
-                    <td style={{ padding: '8px 8px', position: 'relative' }}>
-                      <button className="icon-btn" style={{ width: 26, height: 26 }}
-                        onClick={e => { e.stopPropagation(); setOpenMenuId(prev => prev === n.id ? null : n.id); }}>
-                        <ChevronDown size={13} />
+                    {/* Actions — direct buttons. The old dropdown (position:absolute inside
+                        the table) got clipped by the table overflow, so «Редактировать»
+                        was invisible/unclickable. Direct icon buttons can't be clipped. */}
+                    <td style={{ padding: '8px 8px', whiteSpace: 'nowrap' }}>
+                      <button className="icon-btn" title="Редактировать"
+                        style={{ width: 28, height: 28 }}
+                        onClick={() => setForm({ item: n })}>
+                        <Edit2 size={14} />
                       </button>
-                      {openMenuId === n.id && (
-                        <RowMenu
-                          onEdit={() => { setForm({ item: n }); setOpenMenuId(null); }}
-                          onDelete={() => { deleteItem(n.id); setOpenMenuId(null); }}
-                          onClose={() => setOpenMenuId(null)}
-                        />
-                      )}
+                      <button className="icon-btn" title="Удалить"
+                        style={{ width: 28, height: 28, marginLeft: 4, color: '#ef4444' }}
+                        onClick={() => deleteItem(n.id)}>
+                        <Trash2 size={14} />
+                      </button>
                     </td>
                   </tr>
                 ))}
