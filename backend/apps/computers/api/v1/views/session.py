@@ -193,6 +193,19 @@ class AdminSessionStartAPIView(APIView):
                         gprofile.session_mode = gprofile.SESSION_PREPAID
                         gprofile.save(update_fields=["is_guest", "session_mode"])
                         gprofile.add_minutes(minutes)  # += minutes, sets is_active=True
+                        # Push the new balance so the guest shell reflects the added time
+                        # instantly — a SECOND tariff stacked on the backend but looked
+                        # "не добавился" until the next poll without this push.
+                        try:
+                            from realtime.broadcast import push_balance
+                            push_balance(guest_user.pk, {
+                                "minutes_remaining": gprofile.minutes_remaining,
+                                "formatted_time": gprofile.formatted_time,
+                                "has_access": bool(gprofile.is_active and gprofile.minutes_remaining > 0),
+                                "session_mode": "prepaid",
+                            })
+                        except Exception:
+                            pass
                 except Exception:
                     pass
 
