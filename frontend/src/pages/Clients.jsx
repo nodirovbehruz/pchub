@@ -1049,7 +1049,10 @@ const Clients = () => {
             )}
             {filtered.map(c => {
               const mins = c.minutes_remaining || 0;
-              const isOnline = c.is_active || c.is_active_session || false;
+              // Online = currently LOGGED IN (is_active_session). Was OR'd with is_active,
+              // which means "has an active session/time on the profile", not "logged in" —
+              // so a client who logged out (is_active_session cleared) still showed «Активен».
+              const isOnline = c.is_active_session || false;
               const deposit = Number(c.deposit_money || 0);
               const discount = c.personal_discount || 0;
               return (
