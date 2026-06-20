@@ -266,6 +266,27 @@ class GameSessionService(IGameSessionService):
         else:
             raise ValidationError({"error": "computer_id or hardware_id is required"})
 
+        # Auto-provision: a PC that registered AFTER games were added (or re-registered, e.g.
+        # after a DB reset) has NO ComputerGame links → "Игр пока нет", even though the club
+        # has games. The Game post_save signal only links games to computers that exist at
+        # save time — there's no reverse link for a new computer. Backfill any active games
+        # this computer is missing so the catalog appears in the shell.
+        try:
+            from apps.games.models import Game
+            linked = set(
+                ComputerGame.objects.filter(computer=computer).values_list("game_id", flat=True)
+            )
+            missing = Game.objects.filter(is_active=True).exclude(id__in=linked)
+            new_links = [
+                ComputerGame(computer=computer, game=g, is_installed=True,
+                             install_path=g.executable_path or "")
+                for g in missing
+            ]
+            if new_links:
+                ComputerGame.objects.bulk_create(new_links, ignore_conflicts=True)
+        except Exception:
+            pass
+
         # Get installed games
         computer_games = ComputerGame.objects.filter(
             computer=computer, is_installed=True
