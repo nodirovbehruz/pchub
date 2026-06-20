@@ -574,7 +574,11 @@ class PaymentRefundAPIView(APIView):
             # refund requests for the same payment could BOTH pass it and reverse
             # stock/deposit + cut a cash-out (РКО) twice. Re-fetch under a row lock and
             # re-check the stamp before doing any reversal.
-            payment = Payment.objects.select_for_update().select_related("user").get(pk=pk)
+            # No select_related("user") here: it LEFT-JOINs the NULLABLE user FK (guests have
+            # user=NULL), and Postgres refuses "FOR UPDATE" on the nullable side of an outer
+            # join → HTTP 500 on every refund reaching this lock (e.g. a guest «Магазин» sale).
+            # sqlite ignores FOR UPDATE, so it never reproduced locally. user is loaded lazily.
+            payment = Payment.objects.select_for_update().get(pk=pk)
             if payment.note and "[REFUNDED]" in payment.note:
                 return Response({"error": "Платёж уже возвращён"}, status=status.HTTP_400_BAD_REQUEST)
 
